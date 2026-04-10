@@ -1,9 +1,10 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, Response
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import json
 import os
 import re
+import io
 from groq import Groq
 from dotenv import load_dotenv
 load_dotenv()
@@ -366,6 +367,90 @@ def execute_ai_action(action_data):
     except Exception as e:
         db.session.rollback()
         return {'action': action, 'status': 'error', 'message': str(e)}
+
+
+# ─── Voice Routes ──────────────────────────────────────────────────────────────
+
+def _clean_for_tts(text):
+    """Strip markdown formatting so TTS reads cleanly."""
+    t = re.sub(r'```[\s\S]*?```', '', text)
+    t = re.sub(r'\*\*(.*?)\*\*', r'\1', t)
+    t = re.sub(r'\*(.*?)\*', r'\1', t)
+    t = re.sub(r'`([^`]+)`', r'\1', t)
+    t = re.sub(r'^#{1,4}\s+', '', t, flags=re.MULTILINE)
+    t = re.sub(r'\s+', ' ', t).strip()
+    return t[:1000]
+
+
+@app.route('/api/voice/transcribe', methods=['POST'])
+def voice_transcribe():
+    """Audio -> text via Groq Whisper. Returns: { "text": "..." }"""
+    if not GROQ_API_KEY:
+        return jsonify({'error': 'GROQ_API_KEY not configured'}), 400
+    if 'audio' not in request.files:
+        return jsonify({'error': 'No audio file provided'}), 400
+
+    f = request.files['audio']
+    audio_bytes = f.read()
+    filename = f.filename or 'voice.webm'
+
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        transcription = client.audio.transcriptions.create(
+            file=(filename, audio_bytes, 'audio/webm'),
+            model='whisper-large-v3',
+            language='en',
+            response_format='json'
+        )
+        return jsonify({'text': transcription.text.strip()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/voice/speak', methods=['POST'])
+def voice_speak():
+    """
+    Text -> speech. Tries playai-tts first, then orpheus, then signals
+    the frontend to fall back to browser Web Speech API.
+    Returns: audio stream  OR  JSON { "error": "...", "use_browser_tts": true }
+    """
+    if not GROQ_API_KEY:
+        return jsonify({'error': 'GROQ_API_KEY not configured', 'use_browser_tts': True}), 400
+
+    data = request.json or {}
+    text = data.get('text', '').strip()
+    if not text:
+        return jsonify({'error': 'No text provided', 'use_browser_tts': True}), 400
+
+    clean = _clean_for_tts(text)
+    client = Groq(api_key=GROQ_API_KEY)
+
+    # Attempt 1: playai-tts (Fritz-PlayAI voice)
+    try:
+        resp = client.audio.speech.create(
+            model='playai-tts',
+            voice='Fritz-PlayAI',
+            input=clean,
+            response_format='mp3'
+        )
+        return Response(resp.read(), mimetype='audio/mpeg',
+                        headers={'Content-Disposition': 'inline; filename="aria.mp3"'})
+    except Exception:
+        pass
+
+    # Attempt 2: canopylabs/orpheus-v1-english (replacement for playai-tts)
+    try:
+        resp = client.audio.speech.create(
+            model='canopylabs/orpheus-v1-english',
+            voice='tara',
+            input=clean,
+            response_format='wav'
+        )
+        return Response(resp.read(), mimetype='audio/wav',
+                        headers={'Content-Disposition': 'inline; filename="aria.wav"'})
+    except Exception as e:
+        # Both Groq TTS models failed → tell the browser to use its own TTS
+        return jsonify({'error': str(e), 'use_browser_tts': True}), 500
 
 
 # ─── Seed Data ─────────────────────────────────────────────────────────────────

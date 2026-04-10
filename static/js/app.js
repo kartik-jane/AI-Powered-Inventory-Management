@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupChat();
   setupSearch();
   setupStockModal();
+  setupVoice();   // ← voice module init
   if (state.apiKey) document.getElementById('apiKeyInput').value = state.apiKey;
 });
 
@@ -96,7 +97,7 @@ function renderProductTable(products) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
           </button>
           <button class="icon-btn" title="Edit" onclick="editProduct(${p.id})">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
           <button class="icon-btn danger" title="Delete" onclick="deleteProduct(${p.id}, '${esc(p.name)}')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"/></svg>
@@ -294,12 +295,10 @@ function setupChat() {
   });
 }
 
-async function sendMessage() {
+async function sendMessage(opts = {}) {
   const input = document.getElementById('chatInput');
-  const text = input.value.trim();
+  const text = opts.text || input.value.trim();
   if (!text) return;
-
-  // No API key needed from frontend
 
   // Clear welcome screen
   const welcome = document.querySelector('.chat-welcome');
@@ -326,6 +325,9 @@ async function sendMessage() {
 
     state.chatHistory.push({ role: 'assistant', content: data.message });
     appendMessage('ai', data.message, data.actions_taken);
+
+    // Voice hook: speaks reply if user sent this message via voice
+    voice.speakIfActive(data.message);
 
     if (data.actions_taken?.length) {
       loadStats(); loadProducts(); loadTransactions();
@@ -406,9 +408,6 @@ function formatMarkdown(text) {
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
-
-
-
 function confirmClearData() {
   if (confirm('This will DELETE ALL products and transactions. Are you sure?')) {
     showToast('Reset not implemented in demo mode', 'error');
@@ -445,4 +444,264 @@ function esc(str) {
 
 function debounce(fn, ms) {
   let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ─── VOICE MODULE ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+//
+//  RULE: text input → text reply only (no change to existing behaviour)
+//        voice input → AI reply shown as text in chat AND spoken aloud
+//
+//  Flow:
+//    1. User presses 🎙️ mic button → MediaRecorder captures audio
+//    2. Audio  → POST /api/voice/transcribe  (Groq Whisper STT)
+//    3. Transcribed text → existing sendMessage() → /api/chat  (unchanged)
+//    4. AI reply text → shown in chat bubble (existing appendMessage)
+//       AND → POST /api/voice/speak  (Groq TTS, or browser Speech fallback)
+//    5. Browser plays audio response
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+const voice = {
+  active: false,         // true while a voice-originated message is in flight
+  mediaRecorder: null,
+  chunks: [],
+  currentAudio: null,
+};
+
+// Called by sendMessage() after every AI reply.
+// Only speaks if the current message was sent via voice.
+voice.speakIfActive = function(text) {
+  if (!voice.active) return;
+  voice.active = false;
+  speakReply(text);
+};
+
+// ─── UI setup ────────────────────────────────────────────────────────────────
+function setupVoice() {
+  const wrap = document.querySelector('.chat-input-wrap');
+  if (!wrap) return;
+
+  // Mic button — hold to record
+  const micBtn = document.createElement('button');
+  micBtn.id    = 'micBtn';
+  micBtn.className = 'mic-btn';
+  micBtn.title = 'Hold to speak — ARIA will reply with voice';
+  micBtn.innerHTML = `
+    <svg class="mic-idle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <rect x="9" y="2" width="6" height="12" rx="3"/>
+      <path d="M5 10a7 7 0 0014 0M12 19v3M8 22h8"/>
+    </svg>
+    <svg class="mic-rec" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+      <circle cx="12" cy="12" r="8" opacity="0.25"/>
+      <circle cx="12" cy="12" r="4"/>
+    </svg>`;
+
+  // Status label shown above the input while recording / processing
+  const pill = document.createElement('div');
+  pill.id        = 'voiceStatus';
+  pill.className = 'voice-status';
+  pill.style.display = 'none';
+
+  // Insert mic before send button; pill above the input area
+  wrap.insertBefore(micBtn, wrap.querySelector('#sendBtn'));
+  document.querySelector('.chat-input-area').prepend(pill);
+
+  // Hold to record (mouse + touch)
+  micBtn.addEventListener('mousedown',  voiceStart);
+  micBtn.addEventListener('touchstart', e => { e.preventDefault(); voiceStart(); }, { passive: false });
+  micBtn.addEventListener('mouseup',    voiceStop);
+  micBtn.addEventListener('mouseleave', voiceStop);
+  micBtn.addEventListener('touchend',   voiceStop);
+}
+
+// ─── Recording ───────────────────────────────────────────────────────────────
+async function voiceStart() {
+  if (voice.mediaRecorder) return;   // already recording
+  // Stop any currently playing reply so we don't record it
+  if (voice.currentAudio) { voice.currentAudio.pause(); voice.currentAudio = null; }
+
+  try {
+    const stream   = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = getSupportedMime();
+    voice.chunks   = [];
+    voice.mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    voice.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) voice.chunks.push(e.data); };
+    voice.mediaRecorder.onstop = onRecordingDone;
+    voice.mediaRecorder.start();
+
+    setVoiceStatus('🔴 Listening… release to send', 'recording');
+    document.getElementById('micBtn').classList.add('recording');
+    document.getElementById('micBtn').querySelector('.mic-idle').style.display = 'none';
+    document.getElementById('micBtn').querySelector('.mic-rec').style.display  = '';
+  } catch {
+    showToast('Microphone access denied', 'error');
+  }
+}
+
+function voiceStop() {
+  if (!voice.mediaRecorder) return;
+  voice.mediaRecorder.stop();
+  voice.mediaRecorder.stream.getTracks().forEach(t => t.stop());
+  voice.mediaRecorder = null;
+
+  setVoiceStatus('⏳ Transcribing…', 'processing');
+  document.getElementById('micBtn').classList.remove('recording');
+  document.getElementById('micBtn').querySelector('.mic-idle').style.display = '';
+  document.getElementById('micBtn').querySelector('.mic-rec').style.display  = 'none';
+}
+
+async function onRecordingDone() {
+  const mimeType = getSupportedMime();
+  const blob = new Blob(voice.chunks, { type: mimeType || 'audio/webm' });
+  voice.chunks = [];
+
+  if (blob.size < 1000) {
+    setVoiceStatus('', '');
+    showToast('Recording too short — hold the mic longer', 'error');
+    return;
+  }
+
+  // ── Step 1: Transcribe ───────────────────────────────────────────────────
+  try {
+    const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm';
+    const fd  = new FormData();
+    fd.append('audio', blob, `voice.${ext}`);
+
+    const res  = await fetch('/api/voice/transcribe', { method: 'POST', body: fd });
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      setVoiceStatus('', '');
+      showToast('Transcription failed: ' + (data.error || 'unknown error'), 'error');
+      return;
+    }
+
+    const text = (data.text || '').trim();
+    if (!text) {
+      setVoiceStatus('', '');
+      showToast('Could not understand speech', 'error');
+      return;
+    }
+
+    // Show what was heard in the status pill briefly
+    setVoiceStatus(`🎙️ "${text}"`, 'heard');
+
+    // ── Step 2: Send to AI via existing sendMessage() ─────────────────────
+    //    We flag voice.active = true so speakIfActive() fires on the reply
+    voice.active = true;
+    document.getElementById('chatInput').value = text;
+
+    setTimeout(() => {
+      setVoiceStatus('', '');
+      sendMessage({ text });           // existing function, unchanged
+    }, 500);
+
+  } catch (err) {
+    setVoiceStatus('', '');
+    showToast('Voice error: ' + err.message, 'error');
+  }
+}
+
+// ─── TTS: speak the AI reply ─────────────────────────────────────────────────
+async function speakReply(text) {
+  setVoiceStatus('🔊 ARIA is speaking…', 'speaking');
+
+  try {
+    const res = await fetch('/api/voice/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+
+    // If server returned JSON (error / fallback signal), use browser TTS
+    const contentType = res.headers.get('Content-Type') || '';
+    if (!res.ok || contentType.includes('application/json')) {
+      const errData = await res.json().catch(() => ({}));
+      // use_browser_tts flag means Groq TTS unavailable → fall back gracefully
+      if (errData.use_browser_tts || errData.error) {
+        setVoiceStatus('', '');
+        browserTTS(text);
+        return;
+      }
+      setVoiceStatus('', '');
+      showToast('TTS failed', 'error');
+      return;
+    }
+
+    // Got audio stream → play it
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    voice.currentAudio = audio;
+
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      voice.currentAudio = null;
+      setVoiceStatus('', '');
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      voice.currentAudio = null;
+      setVoiceStatus('', '');
+      showToast('Audio playback error — trying browser voice', 'error');
+      browserTTS(text);
+    };
+    audio.play().catch(() => {
+      // Autoplay blocked → fall back to browser TTS
+      setVoiceStatus('', '');
+      browserTTS(text);
+    });
+
+  } catch {
+    setVoiceStatus('', '');
+    browserTTS(text);
+  }
+}
+
+// ─── Browser Web Speech API fallback ─────────────────────────────────────────
+function browserTTS(text) {
+  if (!window.speechSynthesis) return;
+  // Clean markdown before speaking
+  const clean = text
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/#{1,4}\s+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 500);
+
+  window.speechSynthesis.cancel();
+  const utt  = new SpeechSynthesisUtterance(clean);
+  utt.rate   = 1.0;
+  utt.pitch  = 1.05;
+  utt.lang   = 'en-US';
+  // Prefer a female voice if available
+  const voices = window.speechSynthesis.getVoices();
+  const female = voices.find(v => /female|woman|girl|zira|samantha|karen|victoria/i.test(v.name));
+  if (female) utt.voice = female;
+  setVoiceStatus('🔊 Speaking (browser)…', 'speaking');
+  utt.onend = () => setVoiceStatus('', '');
+  window.speechSynthesis.speak(utt);
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function setVoiceStatus(msg, type) {
+  const el = document.getElementById('voiceStatus');
+  if (!el) return;
+  if (!msg) { el.style.display = 'none'; el.textContent = ''; el.className = 'voice-status'; return; }
+  el.textContent = msg;
+  el.className   = `voice-status ${type}`;
+  el.style.display = 'block';
+}
+
+function getSupportedMime() {
+  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+  for (const t of types) if (MediaRecorder.isTypeSupported(t)) return t;
+  return '';
 }
