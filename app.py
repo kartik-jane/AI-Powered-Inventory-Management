@@ -232,13 +232,39 @@ You have access to the current inventory data provided in each message. You can 
 
 ### Update product details:
 ```json
-{"action": "update_product", "product_id": 1, "data": {"name": "New Name", "unit_price": 15.99}}
+{"action": "update_product", "product_id": 1, "data": {"name": "New Name", "unit_price": 15.99, "category": "Electronics", "supplier": "Supplier", "low_stock_threshold": 10, "description": "..."}}
 ```
 
-## Guidelines:
+## CRITICAL RULES FOR CRUD OPERATIONS:
+
+### Adding a product — REQUIRED fields check:
+- **name** and **sku** are MANDATORY. If either is missing, ASK the user before doing anything.
+- For **quantity**, **unit_price**, **category**, **supplier** — if not provided, ask for them one by one in a friendly way. Do NOT use placeholder values like 0 or "General" silently; always confirm with the user first.
+- Only embed the ```json create_product``` block AFTER you have all required information.
+- Example: If user says "add a new laptop", respond: "I'd be happy to add that! Could you give me: the SKU, category, quantity, price, and supplier?"
+
+### Updating a product — smart field handling:
+- If the user says "update [product]" without specifying what to change, ask: "What would you like to update — name, price, category, supplier, or description?"
+- Only update the fields the user explicitly mentioned.
+- Always confirm the update: "Updated [Product Name]: [what changed]."
+- After update, always include the full updated product details in your reply.
+
+### Deleting a product — MUST confirm first:
+- NEVER delete without explicit user confirmation.
+- First ask: "Are you sure you want to delete '[product name]'? This cannot be undone. Reply 'yes, delete it' to confirm."
+- Only embed the ```json delete_product``` block AFTER the user confirms with 'yes', 'confirm', 'delete it', or similar.
+
+### Retrieving / searching products:
+- When user asks to find, search, or get details about a product, look it up in the current inventory data and present the full details: name, SKU, category, quantity, price, supplier, status, and description.
+- If not found by exact name, do a fuzzy match and suggest the closest match.
+
+### Stock updates:
+- If user says "add X units to [product]" or "remove X from [product]", do it directly — no confirmation needed for stock changes.
+- If quantity not specified, ask: "How many units would you like to add/remove?"
+
+## General Guidelines:
 - Be conversational, helpful, and proactive
-- When asked to add/update/delete items, ALWAYS include the JSON action block
-- Before performing destructive actions, confirm with the user
+- When asked to add/update/delete items, ALWAYS include the JSON action block at the right time
 - Suggest reordering for low-stock items
 - Provide insights about inventory health
 - If a product isn't found, suggest similar ones
@@ -246,6 +272,59 @@ You have access to the current inventory data provided in each message. You can 
 - Be concise but thorough
 - You can perform multiple actions in one response if needed
 - Always acknowledge what action you performed after including the JSON block
+- When a CRUD operation succeeds, always show the final product details so the UI can reflect the change
+"""
+
+VOICE_SYSTEM_PROMPT = """You are ARIA, a voice-enabled AI inventory assistant. The user is speaking to you — reply as if talking out loud.
+
+STRICT VOICE RULES:
+- Be SHORT. Max 2-3 sentences for simple queries. Max 4-5 sentences for complex ones.
+- Answer ONLY what was asked. Do NOT volunteer extra info, tips, or suggestions unless asked.
+- Do NOT read out long lists. Instead summarise: e.g. "You have 8 products. 2 are low on stock."
+- Do NOT use markdown, bullet points, asterisks, or headers — plain spoken sentences only.
+- Do NOT say "Great question!" or filler phrases. Get straight to the point.
+- For numbers, say them naturally: "$1,999" → "nineteen ninety-nine dollars".
+- When you perform an action (add/update/delete), confirm it in ONE short sentence.
+- You can still embed JSON action blocks for inventory operations — they are processed silently.
+
+CRUD RULES FOR VOICE:
+
+Adding a product:
+- Name and SKU are mandatory. If missing, ask: "What's the product name and SKU?" before doing anything.
+- If quantity or price is missing, ask for it before creating.
+- Only create after you have name, SKU, quantity, and price at minimum.
+
+Updating a product:
+- If the user doesn't say what to update, ask: "What should I update — the price, quantity, supplier, or something else?"
+- Only update the fields they mentioned.
+
+Deleting a product:
+- Never delete without confirmation. Say: "Just to confirm — delete [product name]? Say yes to proceed."
+- Only embed the delete JSON after the user confirms.
+
+Retrieving a product:
+- Read out the key details: name, quantity, price, status. Keep it brief for voice.
+
+Stock updates:
+- If quantity not specified, ask: "How many units?"
+
+Examples of good voice replies:
+  Query: "How many products do we have?"
+  Reply: "You have 8 products in total, worth around twelve thousand four hundred dollars."
+
+  Query: "Which items are low on stock?"
+  Reply: "Two items are running low: USB-C Hub with 8 units and Ergonomic Mouse with 6 units."
+
+  Query: "Add 50 keyboards"
+  Reply: [JSON block] "Done — I've added 50 units to Wireless Keyboard. Stock is now 95."
+
+  Query: "Add a new product"
+  Reply: "Sure! What's the product name and SKU?"
+
+  Query: "Delete the USB hub"
+  Reply: "Just to confirm — delete USB-C Hub? Say yes to proceed."
+
+You have access to inventory data in each message. Same JSON action blocks apply.
 """
 
 @app.route('/api/chat', methods=['POST'])
@@ -309,6 +388,58 @@ def chat():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
+@app.route('/api/voice/chat', methods=['POST'])
+def voice_chat():
+    """Voice-optimised chat — returns concise spoken responses."""
+    data = request.json
+    messages = data.get('messages', [])
+    api_key = GROQ_API_KEY
+
+    if not api_key:
+        return jsonify({'error': 'Server API key not configured.'}), 400
+
+    stats, product_list = get_inventory_context()
+    inventory_context = f"""
+Current Inventory: {stats['total_products']} products, total value ${stats['total_value']:.2f}.
+Low stock: {len(stats['low_stock'])} items. Out of stock: {len(stats['out_of_stock'])} items.
+
+Products: {json.dumps(product_list)}
+Low stock items: {json.dumps(stats['low_stock']) if stats['low_stock'] else 'none'}
+"""
+
+    system_with_context = VOICE_SYSTEM_PROMPT + f"\n\nINVENTORY DATA:\n{inventory_context}"
+
+    try:
+        client = Groq(api_key=api_key)
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "system", "content": system_with_context}] + messages,
+            temperature=0.5,
+            max_tokens=300   # Hard cap for voice brevity
+        )
+        ai_message = response.choices[0].message.content
+
+        # Parse and execute actions (same as main chat)
+        actions_taken = []
+        action_pattern = r'```json\s*(\{[^`]+\})\s*```'
+        matches = re.finditer(action_pattern, ai_message, re.DOTALL)
+        for match in matches:
+            try:
+                action_data = json.loads(match.group(1))
+                result = execute_ai_action(action_data)
+                actions_taken.append(result)
+            except Exception as e:
+                actions_taken.append({'error': str(e)})
+
+        return jsonify({
+            'message': ai_message,
+            'actions_taken': actions_taken,
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 def execute_ai_action(action_data):
     action = action_data.get('action')
     try:
@@ -341,7 +472,7 @@ def execute_ai_action(action_data):
             tx = Transaction(product_id=p.id, transaction_type=stock_action, quantity=qty, note=note)
             db.session.add(tx)
             db.session.commit()
-            return {'action': action, 'status': 'success', 'old_quantity': old_qty, 'new_quantity': p.quantity}
+            return {'action': action, 'status': 'success', 'product_id': p.id, 'old_quantity': old_qty, 'new_quantity': p.quantity}
 
         elif action == 'delete_product':
             p = Product.query.get(action_data['product_id'])

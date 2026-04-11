@@ -75,7 +75,6 @@ async function loadProducts() {
     populateCategoryFilter(state.products);
   } catch (e) { console.error(e); }
 }
-
 function renderProductTable(products) {
   const tbody = document.getElementById('productTableBody');
   if (!products.length) {
@@ -278,18 +277,27 @@ function setupChat() {
   const input = document.getElementById('chatInput');
   const sendBtn = document.getElementById('sendBtn');
 
+  function updateSendBtn() {
+    // Only show send btn if not in voice mode and there's text
+    if (!voice.active) {
+      sendBtn.style.display = input.value.trim() ? '' : 'none';
+    }
+  }
+
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   });
   input.addEventListener('input', () => {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    updateSendBtn();
   });
   sendBtn.addEventListener('click', sendMessage);
 
   document.querySelectorAll('.quick-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       input.value = btn.dataset.prompt;
+      updateSendBtn();
       sendMessage();
     });
   });
@@ -308,6 +316,8 @@ async function sendMessage(opts = {}) {
   state.chatHistory.push({ role: 'user', content: text });
   input.value = '';
   input.style.height = 'auto';
+  // hide send btn since input is now empty
+  document.getElementById('sendBtn').style.display = 'none';
 
   const typingId = appendTyping();
   document.getElementById('sendBtn').disabled = true;
@@ -330,7 +340,9 @@ async function sendMessage(opts = {}) {
     voice.speakIfActive(data.message);
 
     if (data.actions_taken?.length) {
-      loadStats(); loadProducts(); loadTransactions();
+      await Promise.all([loadStats(), loadProducts(), loadTransactions()]);
+      // Sync the Add/Edit Product form for any successful CRUD action
+      syncFormFromActions(data.actions_taken);
     }
   } catch (e) {
     removeTyping(typingId);
@@ -338,6 +350,59 @@ async function sendMessage(opts = {}) {
   } finally {
     document.getElementById('sendBtn').disabled = false;
   }
+}
+
+/**
+ * After AI executes a CRUD action, populate the Add Product form
+ * so the Products section always reflects the latest state.
+ * Call this AFTER await loadProducts() so state.products is fresh.
+ */
+function syncFormFromActions(actions) {
+  for (const a of actions) {
+    if (a.status !== 'success') continue;
+
+    if (a.action === 'create_product' && a.product) {
+      // After loadProducts() the product is now in state.products — populate form
+      const fresh = state.products.find(x => x.id === a.product.id) || a.product;
+      populateEditForm(fresh);
+
+    } else if (a.action === 'update_product' && a.product) {
+      // Always refresh the form with updated data
+      const fresh = state.products.find(x => x.id === a.product.id) || a.product;
+      populateEditForm(fresh);
+
+    } else if (a.action === 'delete_product') {
+      // Clear the form — product no longer exists
+      clearForm();
+
+    } else if (a.action === 'update_stock') {
+      // Find the product in the freshly loaded list by matching the form's current edit id
+      // or by product_id in the action
+      const targetId = a.product_id || parseInt(document.getElementById('editProductId').value);
+      if (targetId) {
+        const fresh = state.products.find(x => x.id === targetId);
+        if (fresh) populateEditForm(fresh);
+      }
+    }
+  }
+}
+
+/**
+ * Populate the Add Product form in edit mode with a product object.
+ * Mirrors editProduct() but works from a product dict directly.
+ */
+function populateEditForm(p) {
+  document.getElementById('editProductId').value  = p.id;
+  document.getElementById('fName').value          = p.name || '';
+  document.getElementById('fSku').value           = p.sku  || '';
+  document.getElementById('fCategory').value      = p.category || '';
+  document.getElementById('fQty').value           = p.quantity ?? 0;
+  document.getElementById('fPrice').value         = p.unit_price ?? 0;
+  document.getElementById('fSupplier').value      = p.supplier || '';
+  document.getElementById('fThreshold').value     = p.low_stock_threshold ?? 10;
+  document.getElementById('fDescription').value   = p.description || '';
+  document.getElementById('formTitle').textContent       = `Edit: ${p.name}`;
+  document.getElementById('saveProductBtn').textContent  = 'Update Product';
 }
 
 function appendMessage(role, text, actions = []) {
@@ -353,17 +418,29 @@ function appendMessage(role, text, actions = []) {
   const cleanText = text.replace(/```json[\s\S]*?```/g, '').trim();
   const formattedText = formatMarkdown(cleanText);
 
-  // Build action badges
+  // Build action badges + product cards
   let actionBadges = '';
   if (actions?.length) {
     actionBadges = actions.map(a => {
       if (a.status === 'success') {
-        const label = a.action === 'create_product' ? `✓ Created: ${a.product?.name}`
-          : a.action === 'update_stock' ? `✓ Stock: ${a.old_quantity} → ${a.new_quantity}`
-          : a.action === 'delete_product' ? `✓ ${a.message}`
-          : a.action === 'update_product' ? `✓ Updated: ${a.product?.name}`
-          : `✓ ${a.action}`;
-        return `<span class="action-badge">${label}</span>`;
+        let label = '';
+        let productCard = '';
+
+        if (a.action === 'create_product' && a.product) {
+          label = `✓ Created: ${a.product.name}`;
+          productCard = buildProductCard(a.product, 'created');
+        } else if (a.action === 'update_stock') {
+          label = `✓ Stock: ${a.old_quantity} → ${a.new_quantity}`;
+        } else if (a.action === 'delete_product') {
+          label = `✓ ${a.message}`;
+        } else if (a.action === 'update_product' && a.product) {
+          label = `✓ Updated: ${a.product.name}`;
+          productCard = buildProductCard(a.product, 'updated');
+        } else {
+          label = `✓ ${a.action}`;
+        }
+
+        return `<span class="action-badge">${label}</span>${productCard}`;
       } else {
         return `<span class="action-badge error">✗ ${a.message || a.action}</span>`;
       }
@@ -374,6 +451,30 @@ function appendMessage(role, text, actions = []) {
   div.innerHTML = `${avatar}<div class="msg-bubble">${formattedText}${actionBadges}</div>`;
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
+}
+
+/**
+ * Build a compact product detail card shown inline in the chat after CRUD.
+ */
+function buildProductCard(p, mode) {
+  const statusClass = p.status === 'In Stock' ? 'in-stock' : p.status === 'Low Stock' ? 'low-stock' : 'out-stock';
+  const modeLabel   = mode === 'created' ? '🆕 New Product' : '✏️ Updated Product';
+  return `
+    <div class="product-inline-card">
+      <div class="pic-header">
+        <span class="pic-mode">${modeLabel}</span>
+        <span class="badge ${statusClass}">${p.status}</span>
+      </div>
+      <div class="pic-body">
+        <div class="pic-row"><span class="pic-label">Name</span><span class="pic-val">${esc(p.name)}</span></div>
+        <div class="pic-row"><span class="pic-label">SKU</span><code class="pic-code">${esc(p.sku)}</code></div>
+        <div class="pic-row"><span class="pic-label">Category</span><span class="pic-val">${esc(p.category)}</span></div>
+        <div class="pic-row"><span class="pic-label">Quantity</span><span class="pic-val">${p.quantity}</span></div>
+        <div class="pic-row"><span class="pic-label">Price</span><span class="pic-val">${formatCurrency(p.unit_price)}</span></div>
+        ${p.supplier ? `<div class="pic-row"><span class="pic-label">Supplier</span><span class="pic-val">${esc(p.supplier)}</span></div>` : ''}
+      </div>
+      <button class="pic-edit-btn" onclick="editProduct(${p.id});switchPanel('add')">✏️ Edit in Form</button>
+    </div>`;
 }
 
 function appendTyping() {
@@ -448,125 +549,216 @@ function debounce(fn, ms) {
 
 
 
+
+
 // ══════════════════════════════════════════════════════════════════════════════
-// ─── VOICE MODULE ─────────────────────────────────────────────────────────────
+// ─── VOICE MODULE (Auto-cycle conversation — ChatGPT/Gemini style) ────────────
 // ══════════════════════════════════════════════════════════════════════════════
 //
-//  RULE: text input → text reply only (no change to existing behaviour)
-//        voice input → AI reply shown as text in chat AND spoken aloud
+//  NEW FLOW:
+//    1. User clicks inline 🎙️ button → dialog opens, session starts
+//    2. ARIA auto-starts listening via MediaRecorder + Web Audio silence detection
+//    3. When user stops speaking for ~2.5s → recording stops automatically
+//    4. Audio → POST /api/voice/transcribe  (Groq Whisper STT)
+//    5. Text shown on screen → POST /api/voice/chat  (concise AI reply)
+//    6. AI reply shown + spoken via Groq TTS / browser TTS
+//    7. After speaking → auto-starts listening again (loop continues)
+//    8. User clicks "Stop Conversation" button → session ends cleanly
 //
-//  Flow:
-//    1. User presses 🎙️ mic button → MediaRecorder captures audio
-//    2. Audio  → POST /api/voice/transcribe  (Groq Whisper STT)
-//    3. Transcribed text → existing sendMessage() → /api/chat  (unchanged)
-//    4. AI reply text → shown in chat bubble (existing appendMessage)
-//       AND → POST /api/voice/speak  (Groq TTS, or browser Speech fallback)
-//    5. Browser plays audio response
+//  The inline button ONLY starts/ends the session — no per-message clicks needed.
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
 const voice = {
-  active: false,         // true while a voice-originated message is in flight
+  active: false,           // true = session is running (auto-cycle loop active)
   mediaRecorder: null,
   chunks: [],
   currentAudio: null,
+  history: [],             // voice-specific chat history
+  isOpen: false,
+  isBusy: false,           // true while processing (transcribe/think/speak)
+  // Web Audio silence detection
+  audioCtx: null,
+  analyser: null,
+  silenceTimer: null,
+  stream: null,
+  SILENCE_THRESHOLD: 10,   // RMS below this = silence (0–255 scale)
+  SILENCE_DELAY_MS: 2500,  // ms of silence before auto-stop
 };
 
-// Called by sendMessage() after every AI reply.
-// Only speaks if the current message was sent via voice.
-voice.speakIfActive = function(text) {
-  if (!voice.active) return;
-  voice.active = false;
-  speakReply(text);
-};
+// Stub so sendMessage() won't break
+voice.speakIfActive = function() {};
 
-// ─── UI setup ────────────────────────────────────────────────────────────────
-function setupVoice() {
-  const wrap = document.querySelector('.chat-input-wrap');
-  if (!wrap) return;
-
-  // Mic button — hold to record
-  const micBtn = document.createElement('button');
-  micBtn.id    = 'micBtn';
-  micBtn.className = 'mic-btn';
-  micBtn.title = 'Hold to speak — ARIA will reply with voice';
-  micBtn.innerHTML = `
-    <svg class="mic-idle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <rect x="9" y="2" width="6" height="12" rx="3"/>
-      <path d="M5 10a7 7 0 0014 0M12 19v3M8 22h8"/>
-    </svg>
-    <svg class="mic-rec" viewBox="0 0 24 24" fill="currentColor" style="display:none">
-      <circle cx="12" cy="12" r="8" opacity="0.25"/>
-      <circle cx="12" cy="12" r="4"/>
-    </svg>`;
-
-  // Status label shown above the input while recording / processing
-  const pill = document.createElement('div');
-  pill.id        = 'voiceStatus';
-  pill.className = 'voice-status';
-  pill.style.display = 'none';
-
-  // Insert mic before send button; pill above the input area
-  wrap.insertBefore(micBtn, wrap.querySelector('#sendBtn'));
-  document.querySelector('.chat-input-area').prepend(pill);
-
-  // Hold to record (mouse + touch)
-  micBtn.addEventListener('mousedown',  voiceStart);
-  micBtn.addEventListener('touchstart', e => { e.preventDefault(); voiceStart(); }, { passive: false });
-  micBtn.addEventListener('mouseup',    voiceStop);
-  micBtn.addEventListener('mouseleave', voiceStop);
-  micBtn.addEventListener('touchend',   voiceStop);
-}
-
-// ─── Recording ───────────────────────────────────────────────────────────────
-async function voiceStart() {
-  if (voice.mediaRecorder) return;   // already recording
-  // Stop any currently playing reply so we don't record it
-  if (voice.currentAudio) { voice.currentAudio.pause(); voice.currentAudio = null; }
-
-  try {
-    const stream   = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const mimeType = getSupportedMime();
-    voice.chunks   = [];
-    voice.mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-    voice.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) voice.chunks.push(e.data); };
-    voice.mediaRecorder.onstop = onRecordingDone;
-    voice.mediaRecorder.start();
-
-    setVoiceStatus('🔴 Listening… release to send', 'recording');
-    document.getElementById('micBtn').classList.add('recording');
-    document.getElementById('micBtn').querySelector('.mic-idle').style.display = 'none';
-    document.getElementById('micBtn').querySelector('.mic-rec').style.display  = '';
-  } catch {
-    showToast('Microphone access denied', 'error');
+// ─── Dialog open / close ──────────────────────────────────────────────────────
+function openVoiceDialog() {
+  voice.isOpen = true;
+  // Show inline voice bar, hide send btn, show stop btn
+  const bar = document.getElementById('voiceInlineBar');
+  const stopBtn = document.getElementById('voiceStopInlineBtn');
+  const sendBtn = document.getElementById('sendBtn');
+  if (bar) bar.classList.add('active');
+  if (stopBtn) stopBtn.style.display = '';
+  if (sendBtn) sendBtn.style.display = 'none';
+  setVoiceDialogState('idle');
+  // Switch to chat panel so messages are visible
+  if (!document.getElementById('panel-chat').classList.contains('active')) {
+    switchPanel('chat');
   }
 }
 
-function voiceStop() {
-  if (!voice.mediaRecorder) return;
-  voice.mediaRecorder.stop();
-  voice.mediaRecorder.stream.getTracks().forEach(t => t.stop());
-  voice.mediaRecorder = null;
-
-  setVoiceStatus('⏳ Transcribing…', 'processing');
-  document.getElementById('micBtn').classList.remove('recording');
-  document.getElementById('micBtn').querySelector('.mic-idle').style.display = '';
-  document.getElementById('micBtn').querySelector('.mic-rec').style.display  = 'none';
+function closeVoiceDialog() {
+  stopVoiceSession();
+  voice.isOpen = false;
+  const bar = document.getElementById('voiceInlineBar');
+  const stopBtn = document.getElementById('voiceStopInlineBtn');
+  if (bar) bar.classList.remove('active');
+  if (stopBtn) stopBtn.style.display = 'none';
+  _syncInlineBtn('idle');
 }
 
-async function onRecordingDone() {
+// ─── Session start / stop ─────────────────────────────────────────────────────
+function startVoiceSession() {
+  if (voice.active) return;
+  voice.active = true;
+  _syncInlineBtn('active');
+  _setStopBtn(true);
+  // Kick off the first listen cycle
+  _voiceListen();
+}
+
+function stopVoiceSession() {
+  voice.active  = false;
+  voice.isBusy  = false;
+  // Stop silence detection
+  _clearSilenceDetection();
+  // Stop recorder
+  if (voice.mediaRecorder) {
+    try { voice.mediaRecorder.stop(); } catch {}
+    voice.stream?.getTracks().forEach(t => t.stop());
+    voice.mediaRecorder = null;
+    voice.stream = null;
+  }
+  // Stop audio
+  if (voice.currentAudio) { voice.currentAudio.pause(); voice.currentAudio = null; }
+  window.speechSynthesis?.cancel();
+  _syncInlineBtn('idle');
+  _setStopBtn(false);
+  setVoiceDialogState('idle');
+}
+
+// ─── Core listen cycle ────────────────────────────────────────────────────────
+async function _voiceListen() {
+  if (!voice.active) return;
+
+  setVoiceDialogState('listening');
+  voice.chunks = [];
+
+  try {
+    voice.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = getSupportedMime();
+    voice.mediaRecorder = new MediaRecorder(voice.stream, mimeType ? { mimeType } : {});
+    voice.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) voice.chunks.push(e.data); };
+    voice.mediaRecorder.onstop = _onListenDone;
+    voice.mediaRecorder.start();
+
+    // Start silence detection using Web Audio API
+    _startSilenceDetection(voice.stream);
+
+  } catch {
+    showToast('Microphone access denied', 'error');
+    stopVoiceSession();
+  }
+}
+
+// ─── Silence detection via Web Audio ─────────────────────────────────────────
+function _startSilenceDetection(stream) {
+  try {
+    voice.audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+    voice.analyser  = voice.audioCtx.createAnalyser();
+    voice.analyser.fftSize = 512;
+    const source = voice.audioCtx.createMediaStreamSource(stream);
+    source.connect(voice.analyser);
+
+    const buf = new Uint8Array(voice.analyser.fftSize);
+    let silenceStart = null;
+    let hasSpeech    = false;   // must detect speech before triggering silence-stop
+
+    const check = () => {
+      if (!voice.mediaRecorder || voice.mediaRecorder.state !== 'recording') return;
+
+      voice.analyser.getByteTimeDomainData(buf);
+      // RMS energy
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const v = (buf[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / buf.length) * 255;
+
+      if (rms > voice.SILENCE_THRESHOLD) {
+        hasSpeech    = true;
+        silenceStart = null;
+      } else if (hasSpeech) {
+        // Speech detected before — now counting silence
+        if (!silenceStart) silenceStart = Date.now();
+        if (Date.now() - silenceStart >= voice.SILENCE_DELAY_MS) {
+          // Auto-stop recording
+          _clearSilenceDetection();
+          _stopRecording();
+          return;
+        }
+      }
+      voice.silenceTimer = requestAnimationFrame(check);
+    };
+    voice.silenceTimer = requestAnimationFrame(check);
+  } catch {
+    // Web Audio not available — fall back to a fixed 8s max recording
+    voice.silenceTimer = setTimeout(() => _stopRecording(), 8000);
+  }
+}
+
+function _clearSilenceDetection() {
+  if (voice.silenceTimer) {
+    cancelAnimationFrame(voice.silenceTimer);
+    clearTimeout(voice.silenceTimer);
+    voice.silenceTimer = null;
+  }
+  if (voice.audioCtx) {
+    try { voice.audioCtx.close(); } catch {}
+    voice.audioCtx = null;
+    voice.analyser = null;
+  }
+}
+
+function _stopRecording() {
+  if (!voice.mediaRecorder) return;
+  if (voice.mediaRecorder.state === 'recording') {
+    voice.mediaRecorder.stop();
+  }
+  voice.stream?.getTracks().forEach(t => t.stop());
+  voice.mediaRecorder = null;
+  voice.stream = null;
+  setVoiceDialogState('transcribing');
+}
+
+// ─── After recording stops ────────────────────────────────────────────────────
+async function _onListenDone() {
+  if (!voice.active) return;  // Session was stopped mid-flight
+
+  voice.isBusy = true;
   const mimeType = getSupportedMime();
   const blob = new Blob(voice.chunks, { type: mimeType || 'audio/webm' });
   voice.chunks = [];
 
   if (blob.size < 1000) {
-    setVoiceStatus('', '');
-    showToast('Recording too short — hold the mic longer', 'error');
+    // Too short / silence only — restart listening
+    voice.isBusy = false;
+    if (voice.active) _voiceListen();
     return;
   }
 
-  // ── Step 1: Transcribe ───────────────────────────────────────────────────
   try {
+    // ── Step 1: Transcribe ────────────────────────────────────────────────────
     const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm';
     const fd  = new FormData();
     fd.append('audio', blob, `voice.${ext}`);
@@ -574,99 +766,64 @@ async function onRecordingDone() {
     const res  = await fetch('/api/voice/transcribe', { method: 'POST', body: fd });
     const data = await res.json();
 
-    if (!res.ok || data.error) {
-      setVoiceStatus('', '');
-      showToast('Transcription failed: ' + (data.error || 'unknown error'), 'error');
+    if (!res.ok || data.error || !data.text?.trim()) {
+      // Transcription failed or empty — silently restart listening
+      voice.isBusy = false;
+      if (voice.active) _voiceListen();
       return;
     }
 
-    const text = (data.text || '').trim();
-    if (!text) {
-      setVoiceStatus('', '');
-      showToast('Could not understand speech', 'error');
-      return;
-    }
+    const text = data.text.trim();
+    appendVoiceTranscript('user', text);
 
-    // Show what was heard in the status pill briefly
-    setVoiceStatus(`🎙️ "${text}"`, 'heard');
+    // ── Step 2: AI response ───────────────────────────────────────────────────
+    setVoiceDialogState('thinking');
+    voice.history.push({ role: 'user', content: text });
 
-    // ── Step 2: Send to AI via existing sendMessage() ─────────────────────
-    //    We flag voice.active = true so speakIfActive() fires on the reply
-    voice.active = true;
-    document.getElementById('chatInput').value = text;
-
-    setTimeout(() => {
-      setVoiceStatus('', '');
-      sendMessage({ text });           // existing function, unchanged
-    }, 500);
-
-  } catch (err) {
-    setVoiceStatus('', '');
-    showToast('Voice error: ' + err.message, 'error');
-  }
-}
-
-// ─── TTS: speak the AI reply ─────────────────────────────────────────────────
-async function speakReply(text) {
-  setVoiceStatus('🔊 ARIA is speaking…', 'speaking');
-
-  try {
-    const res = await fetch('/api/voice/speak', {
+    const aiRes  = await fetch('/api/voice/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
+      body: JSON.stringify({ messages: voice.history })
     });
+    const aiData = await aiRes.json();
 
-    // If server returned JSON (error / fallback signal), use browser TTS
-    const contentType = res.headers.get('Content-Type') || '';
-    if (!res.ok || contentType.includes('application/json')) {
-      const errData = await res.json().catch(() => ({}));
-      // use_browser_tts flag means Groq TTS unavailable → fall back gracefully
-      if (errData.use_browser_tts || errData.error) {
-        setVoiceStatus('', '');
-        browserTTS(text);
-        return;
-      }
-      setVoiceStatus('', '');
-      showToast('TTS failed', 'error');
+    if (!aiRes.ok || aiData.error) {
+      voice.isBusy = false;
+      showToast('AI error: ' + (aiData.error || 'unknown'), 'error');
+      if (voice.active) _voiceListen();
       return;
     }
 
-    // Got audio stream → play it
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    voice.currentAudio = audio;
+    const reply = aiData.message || '';
+    voice.history.push({ role: 'assistant', content: reply });
+    appendVoiceTranscript('aria', reply);
 
-    audio.onended = () => {
-      URL.revokeObjectURL(url);
-      voice.currentAudio = null;
-      setVoiceStatus('', '');
-    };
-    audio.onerror = () => {
-      URL.revokeObjectURL(url);
-      voice.currentAudio = null;
-      setVoiceStatus('', '');
-      showToast('Audio playback error — trying browser voice', 'error');
-      browserTTS(text);
-    };
-    audio.play().catch(() => {
-      // Autoplay blocked → fall back to browser TTS
-      setVoiceStatus('', '');
-      browserTTS(text);
-    });
+    // Mirror to main chat
+    appendMessage('user', text);
+    state.chatHistory.push({ role: 'user', content: text });
+    appendMessage('ai', reply, aiData.actions_taken);
+    state.chatHistory.push({ role: 'assistant', content: reply });
 
-  } catch {
-    setVoiceStatus('', '');
-    browserTTS(text);
+    if (aiData.actions_taken?.length) {
+      await Promise.all([loadStats(), loadProducts(), loadTransactions()]);
+      // Sync the Add/Edit Product form for any successful voice CRUD action
+      syncFormFromActions(aiData.actions_taken);
+    }
+
+    // ── Step 3: Speak, then loop back to listen ───────────────────────────────
+    await speakVoiceReply(reply);
+
+  } catch (err) {
+    voice.isBusy = false;
+    showToast('Voice error: ' + err.message, 'error');
+    if (voice.active) _voiceListen();
   }
 }
 
-// ─── Browser Web Speech API fallback ─────────────────────────────────────────
-function browserTTS(text) {
-  if (!window.speechSynthesis) return;
-  // Clean markdown before speaking
-  const clean = text
+// ─── TTS — after speaking, auto-restart listening ────────────────────────────
+async function speakVoiceReply(text) {
+  setVoiceDialogState('speaking');
+  const cleanText = text
     .replace(/```[\s\S]*?```/g, '')
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/\*(.*?)\*/g, '$1')
@@ -674,34 +831,198 @@ function browserTTS(text) {
     .replace(/#{1,4}\s+/g, '')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 500);
+    .slice(0, 800);
 
+  const onDone = () => {
+    voice.isBusy = false;
+    // Auto-restart listening for next question
+    if (voice.active) {
+      _voiceListen();
+    } else {
+      setVoiceDialogState('idle');
+    }
+  };
+
+  try {
+    const res = await fetch('/api/voice/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: cleanText })
+    });
+
+    const contentType = res.headers.get('Content-Type') || '';
+    if (!res.ok || contentType.includes('application/json')) {
+      await res.json().catch(() => ({}));
+      browserTTS(cleanText, onDone);
+      return;
+    }
+
+    const blob  = await res.blob();
+    const url   = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    voice.currentAudio = audio;
+
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      voice.currentAudio = null;
+      onDone();
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      voice.currentAudio = null;
+      browserTTS(cleanText, onDone);
+    };
+    audio.play().catch(() => browserTTS(cleanText, onDone));
+  } catch {
+    browserTTS(cleanText, onDone);
+  }
+}
+
+function browserTTS(text, onDone) {
+  if (!window.speechSynthesis) { onDone?.(); return; }
   window.speechSynthesis.cancel();
-  const utt  = new SpeechSynthesisUtterance(clean);
-  utt.rate   = 1.0;
-  utt.pitch  = 1.05;
-  utt.lang   = 'en-US';
-  // Prefer a female voice if available
+  const utt   = new SpeechSynthesisUtterance(text.slice(0, 500));
+  utt.rate    = 1.0;
+  utt.pitch   = 1.05;
+  utt.lang    = 'en-US';
   const voices = window.speechSynthesis.getVoices();
-  const female = voices.find(v => /female|woman|girl|zira|samantha|karen|victoria/i.test(v.name));
+  const female = voices.find(v => /female|woman|zira|samantha|karen|victoria/i.test(v.name));
   if (female) utt.voice = female;
-  setVoiceStatus('🔊 Speaking (browser)…', 'speaking');
-  utt.onend = () => setVoiceStatus('', '');
+  utt.onend   = () => onDone?.();
+  utt.onerror = () => onDone?.();
   window.speechSynthesis.speak(utt);
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function setVoiceStatus(msg, type) {
-  const el = document.getElementById('voiceStatus');
-  if (!el) return;
-  if (!msg) { el.style.display = 'none'; el.textContent = ''; el.className = 'voice-status'; return; }
-  el.textContent = msg;
-  el.className   = `voice-status ${type}`;
-  el.style.display = 'block';
+// ─── State labels ─────────────────────────────────────────────────────────────
+function setVoiceDialogState(state) {
+  // Legacy overlay elements (hidden but kept for compat)
+  const avatar   = document.getElementById('voiceAvatar');
+  const label    = document.getElementById('voiceStateLabel');
+  const waveform = document.getElementById('voiceWaveform');
+  if (avatar)   avatar.className   = 'voice-avatar';
+  if (waveform) waveform.className = 'voice-waveform';
+
+  // Inline bar elements
+  const inlineAvatar = document.getElementById('voiceInlineAvatar');
+  const inlineLabel  = document.getElementById('voiceInlineLabel');
+  const inlineWave   = document.getElementById('voiceInlineWave');
+
+  const states = {
+    idle:         { label: 'Click 🎙️ to start conversation', avatarClass: '',           waveClass: '' },
+    listening:    { label: '🎙️ Listening…',                  avatarClass: 'recording',  waveClass: 'active recording' },
+    transcribing: { label: '⏳ Processing…',                  avatarClass: 'processing', waveClass: 'active processing' },
+    thinking:     { label: '💭 ARIA is thinking…',            avatarClass: 'thinking',   waveClass: 'active thinking' },
+    speaking:     { label: '🔊 ARIA is speaking…',            avatarClass: 'speaking',   waveClass: 'active speaking' },
+  };
+  const s = states[state] || states.idle;
+
+  if (label) label.textContent = s.label;
+  if (s.avatarClass && avatar) avatar.classList.add(s.avatarClass);
+  if (s.waveClass && waveform) s.waveClass.split(' ').forEach(c => waveform.classList.add(c));
+
+  // Drive inline bar
+  if (inlineLabel) inlineLabel.textContent = s.label;
+  if (inlineAvatar) {
+    inlineAvatar.className = 'voice-inline-avatar';
+    if (s.avatarClass) inlineAvatar.classList.add(s.avatarClass);
+  }
+  if (inlineWave) {
+    inlineWave.className = 'voice-waveform voice-inline-wave';
+    if (s.waveClass) s.waveClass.split(' ').forEach(c => inlineWave.classList.add(c));
+  }
 }
 
+// ─── Transcript helpers ───────────────────────────────────────────────────────
+function appendVoiceTranscript(role, text) {
+  const inner = document.getElementById('voiceTranscriptInner');
+  if (!inner) return;
+  inner.querySelector('.voice-hint-text')?.remove();
+
+  const cleanText = text.replace(/```json[\s\S]*?```/g, '').trim();
+  const div = document.createElement('div');
+  div.className = `vtx-msg vtx-${role}`;
+  div.innerHTML = `<span class="vtx-label">${role === 'user' ? 'You' : 'ARIA'}</span><p>${esc(cleanText)}</p>`;
+  inner.appendChild(div);
+  inner.scrollTop = inner.scrollHeight;
+}
+
+// ─── UI Setup ─────────────────────────────────────────────────────────────────
+function setupVoice() {
+  // Inline mic button — one click starts the whole session
+  document.getElementById('voiceInlineBtn')?.addEventListener('click', () => {
+    if (!voice.isOpen) {
+      openVoiceDialog();
+      setTimeout(() => startVoiceSession(), 200);
+    } else if (!voice.active) {
+      startVoiceSession();
+    }
+    // If session already active, do nothing (stop is the inline stop btn)
+  });
+
+  // Inline stop button (replaces send btn during voice)
+  document.getElementById('voiceStopInlineBtn')?.addEventListener('click', closeVoiceDialog);
+
+  // Legacy dialog buttons (overlay is hidden but keep so JS doesn't break)
+  document.getElementById('voiceDialogClose')?.addEventListener('click', closeVoiceDialog);
+  document.getElementById('voiceStopBtn')?.addEventListener('click', stopVoiceSession);
+  document.getElementById('voiceDialogClear')?.addEventListener('click', clearVoiceConversation);
+  document.getElementById('voiceOverlay')?.addEventListener('click', e => {
+    if (e.target === document.getElementById('voiceOverlay')) closeVoiceDialog();
+  });
+}
+
+// ─── Clear voice conversation ─────────────────────────────────────────────────
+function clearVoiceConversation() {
+  const wasActive = voice.active;
+  stopVoiceSession();
+  voice.history = [];
+  const inner = document.getElementById('voiceTranscriptInner');
+  if (inner) inner.innerHTML = '<p class="voice-hint-text">Speak your question — ARIA will auto-reply and keep listening</p>';
+  showToast('Voice conversation cleared', 'info');
+  // If session was running, restart it
+  if (wasActive) setTimeout(() => startVoiceSession(), 300);
+}
+
+// ─── Sync inline button visual ────────────────────────────────────────────────
+function _syncInlineBtn(state) {
+  const btn = document.getElementById('voiceInlineBtn');
+  if (!btn) return;
+  const idle = btn.querySelector('.mic-idle-i');
+  const rec  = btn.querySelector('.mic-rec-i');
+  btn.classList.remove('recording', 'busy', 'active');
+  if (state === 'active') {
+    btn.classList.add('active');
+    if (idle) idle.style.display = 'none';
+    if (rec)  rec.style.display  = '';
+  } else if (state === 'busy') {
+    btn.classList.add('busy');
+    if (idle) idle.style.display = '';
+    if (rec)  rec.style.display  = 'none';
+  } else {
+    if (idle) idle.style.display = '';
+    if (rec)  rec.style.display  = 'none';
+  }
+}
+
+// ─── Enable / disable Stop button ────────────────────────────────────────────
+function _setStopBtn(active) {
+  const btn = document.getElementById('voiceStopBtn');
+  if (!btn) return;
+  btn.classList.toggle('active', active);
+  btn.disabled = !active;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function getSupportedMime() {
   const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
   for (const t of types) if (MediaRecorder.isTypeSupported(t)) return t;
   return '';
 }
+
+// Legacy stubs — keep so nothing elsewhere breaks
+function setVoiceStatus() {}
+function voiceStart() {}
+function voiceStop() {}
+function voiceDialogToggle() {}
+function voiceDialogStart() { startVoiceSession(); }
+function voiceDialogStop()  { stopVoiceSession(); }

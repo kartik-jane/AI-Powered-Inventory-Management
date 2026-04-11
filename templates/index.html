@@ -121,11 +121,50 @@
           </div>
         </div>
       </div>
+      <!-- Inline Voice Status Bar (shown only during voice session) -->
+      <div class="voice-inline-bar" id="voiceInlineBar">
+        <div class="voice-inline-avatar" id="voiceInlineAvatar">
+          <div class="voice-rings">
+            <div class="vring vring-1"></div>
+            <div class="vring vring-2"></div>
+            <div class="vring vring-3"></div>
+          </div>
+          <div class="voice-avatar-core">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+        <div class="voice-inline-info">
+          <span class="voice-inline-label" id="voiceInlineLabel">🎙️ Listening…</span>
+          <div class="voice-waveform voice-inline-wave" id="voiceInlineWave">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+
       <div class="chat-input-area">
         <div class="chat-input-wrap">
           <textarea id="chatInput" placeholder="Ask ARIA anything... 'Add 50 units of Wireless Keyboard' or 'What's our total inventory value?'" rows="1"></textarea>
-          <button class="send-btn" id="sendBtn">
+          <button class="voice-inline-btn" id="voiceInlineBtn" title="Start voice conversation">
+            <svg class="mic-idle-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="9" y="2" width="6" height="12" rx="3"/>
+              <path d="M5 10a7 7 0 0014 0M12 19v3M8 22h8"/>
+            </svg>
+            <svg class="mic-rec-i" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+              <circle cx="12" cy="12" r="8" opacity="0.3"/>
+              <circle cx="12" cy="12" r="5"/>
+            </svg>
+          </button>
+          <!-- Send button: shown when typing -->
+          <button class="send-btn" id="sendBtn" style="display:none">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </button>
+          <!-- Stop voice button: shown during voice session -->
+          <button class="voice-stop-inline-btn" id="voiceStopInlineBtn" style="display:none" title="Stop voice conversation">
+            <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
           </button>
         </div>
         <p class="chat-hint">ARIA can add, update, delete products and manage stock directly from chat</p>
@@ -263,6 +302,19 @@
       <button class="btn-ghost" onclick="closeModal('stockModal')">Cancel</button>
       <button class="btn-primary" onclick="submitStockUpdate()">Update Stock</button>
     </div>
+  </div>
+</div>
+
+<!-- Voice overlay removed — conversation shown inline in chat panel -->
+<div class="voice-overlay" id="voiceOverlay" style="display:none!important">
+  <div class="voice-dialog glass-card">
+    <div class="voice-transcript"><div class="voice-transcript-inner" id="voiceTranscriptInner"></div></div>
+    <div class="voice-avatar-wrap">
+      <div class="voice-avatar" id="voiceAvatar"><div class="voice-rings"><div class="vring vring-1"></div><div class="vring vring-2"></div><div class="vring vring-3"></div></div><div class="voice-avatar-core"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></div></div>
+      <div class="voice-state-label" id="voiceStateLabel"></div>
+    </div>
+    <div class="voice-waveform" id="voiceWaveform"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <div class="voice-controls"><button class="voice-stop-btn" id="voiceStopBtn" disabled></button></div>
   </div>
 </div>
 
