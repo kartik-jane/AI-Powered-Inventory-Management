@@ -36,37 +36,147 @@ GROQ_API_KEY=gsk_your_key python app.py
 http://localhost:5000
 ```
 
-### 5. Enter API Key in Settings
-- Click **Settings** in the sidebar
-- Paste your Groq API key
-- Click **Save API Key**
 
-## Usage
+---
 
-### AI Chat Examples
-- "Add a new product: iPhone 15, SKU ELEC-020, quantity 50, price $999"
-- "How many units of Wireless Keyboard do we have?"
-- "Remove 10 units from Monitor 27 inch"
-- "Show me all low stock items"
-- "What's our total inventory value by category?"
-- "Delete the Ballpoint Pens product"
-- "Set USB-C Hub quantity to 25"
+## ✅ What Was Added (vs. Your Original)
 
-### Manual Management
-- Use the **Products** panel to view, edit, delete items
-- Use the **Add Product** panel to create new items manually
-- Use the **Transactions** panel to view stock history
+### 1. 🔐 Authentication System (`app.py`)
+- **Login page** (`/login`) with username + password
+- Session-based auth — all API routes now require login
+- Two default users seeded: `admin / admin123` and `viewer / viewer123`
+- Audit trail: every stock transaction records `created_by` username
+- **Input sanitization** using `bleach` — protects against XSS in all user inputs
+- Soft-delete for products (`is_active=False`) instead of hard delete
 
-## Project Structure
+### 2. 📊 Analytics Panel (new sidebar item)
+- **4 KPI cards**: Total Value, Estimated Gross Profit, Turnover Rate, Dead Stock count
+- **Category doughnut chart** and **Stock Status bar chart** (Chart.js)
+- **Restock Predictions**: calculates daily usage rate → days until stockout → urgency level
+- **Fast Movers** (top 5 most consumed products in the period)
+- **Dead Stock Detection** (products with zero movement, value tied up)
+- **Supplier Overview** (per-supplier product count, value, low-stock warnings)
+- Period selector: 7 / 30 / 90 days
+
+### 3. 🤖 Upgraded AI Copilot (smarter system prompt)
+ARIA now has **dual mode**:
+- **EXECUTE mode**: CRUD operations (same JSON action blocks as before)
+- **INSIGHT mode**: activates on open-ended questions:
+  - "What should I restock?" → predicts stockout dates, recommends reorder quantities
+  - "Dead stock?" → identifies and advises (markdown/promotion)
+  - "Anomalies?" → flags sudden drops
+  - "Health report?" → full inventory analysis
+- System prompt now includes: 30-day usage data, stock predictions, profit info
+- Voice prompt also upgraded with insight mode (still concise for voice)
+
+### 4. 📈 Data Intelligence (same SQLite, no external tools)
+New `/api/analytics` endpoint returns:
+- `fast_movers` / `slow_movers` (by units consumed in period)
+- `dead_stock` (zero movement items)
+- `stock_predictions` (days until stockout, urgency, suggested reorder qty)
+- `turnover_rate` (units sold / avg inventory)
+- `daily_volume` dict (activity per day)
+- `category_stats` (per-category breakdown)
+
+New `/api/analytics/supplier` for supplier health overview.
+
+### 5. 🔔 In-App Notifications
+- Auto-created on stock events: low stock, out of stock, expiry warnings, anomalies
+- Bell icon in header with unread count badge
+- Notifications panel with color-coded types
+- Mark individual or all as read
+- **Anomaly detection**: flags stock drops of 50%+ in a single transaction
+
+### 6. 🖼 Product Images
+- Image upload zone in the Add Product form (click to browse)
+- Stored in `static/uploads/`
+- Shown as thumbnail in the Products table
+
+### 7. 📤 Bulk Import / Export
+- **Export CSV**: one-click download of full inventory
+- **Import CSV**: upload CSV with validation; duplicates skipped, errors reported
+- **Drag-and-drop** import zone
+- **Template download**: blank CSV with correct headers
+
+### 8. 🏷 New Product Fields
+- `cost_price`: enables profit margin calculation
+- `supplier_lead_days`: used for reorder timing predictions
+- `expiry_date`: tracked and shown in Products table with color-coded status
+
+### 9. 🔍 Better Search & Filters
+- Products table now has a **Status filter** (In Stock / Low Stock / Out of Stock)
+- API search accepts `?status=low|out|ok`
+- Transactions filter by type, date range, and paginated
+
+### 10. ⚡ Performance
+- Simple in-memory cache for `/api/stats` (30s TTL, busted on any write)
+- All product/transaction APIs paginated
+- Chat history trimmed to last 10 messages for context window efficiency
+
+### 11. 🔒 Basic Security
+- `bleach.clean()` on all string inputs (XSS prevention)
+- `login_required` decorator on all API endpoints
+- File upload type validation (images only, 5MB limit)
+- Input range clamping (no negative quantities or prices)
+
+---
+
+## 📁 File Structure
+
 ```
-inventory_ai/
-├── app.py              # Flask backend + API routes
+aria_upgraded/
+├── app.py                    ← Main Flask app (all routes)
 ├── requirements.txt
+├── .env.example
 ├── templates/
-│   └── index.html      # Main UI template
-├── static/
-│   ├── css/style.css   # Glass UI styles
-│   └── js/app.js       # Frontend logic
-└── instance/
-    └── inventory.db    # SQLite database (auto-created)
+│   ├── login.html            ← NEW: login page
+│   └── index.html            ← Upgraded: new panels added
+└── static/
+    ├── css/
+    │   └── style.css         ← Original + new styles appended
+    ├── js/
+    │   └── app.js            ← Upgraded: analytics, notifications, import/export
+    └── uploads/              ← NEW: product images stored here
 ```
+
+---
+
+## 🗂 New API Endpoints
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/login` | Login page |
+| POST | `/api/auth/login` | Authenticate |
+| POST | `/api/auth/logout` | Logout |
+| GET | `/api/auth/me` | Current user |
+| GET | `/api/analytics?days=30` | Full analytics data |
+| GET | `/api/analytics/supplier` | Supplier performance |
+| GET | `/api/products/export/csv` | Export all products as CSV |
+| POST | `/api/products/import/csv` | Bulk import from CSV |
+| POST | `/api/products/<id>/image` | Upload product image |
+| GET | `/api/notifications` | Unread notifications |
+| POST | `/api/notifications/<id>/read` | Mark one read |
+| POST | `/api/notifications/read-all` | Mark all read |
+
+---
+
+## 💡 Example AI Insight Queries (try these in chat)
+
+```
+"Give me a full inventory health report"
+"Which products will run out first? Predict based on usage."
+"What should I order this week?"
+"Find all dead stock and tell me what to do"
+"Are there any anomalies in my stock movements?"
+"What's my profit margin on Electronics category?"
+"Which supplier needs attention?"
+```
+
+---
+
+## 🔧 What Was NOT Changed
+- Flask + SQLite architecture (same)
+- Voice system (100% preserved — same UX, same routes)
+- Existing CRUD operations and AI action JSON format
+- Overall UI design language (same dark theme, same sidebar layout)
+- Product table display (only new columns added)
