@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARIA — AI Inventory System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Variables ──────────────────────────────────────────────────── */
+:root {
+  --bg: #050810;
+  --bg2: #080d1a;
+  --surface: rgba(255,255,255,0.04);
+  --surface2: rgba(255,255,255,0.07);
+  --border: rgba(255,255,255,0.08);
+  --border2: rgba(255,255,255,0.14);
+  --text: #e8eaf6;
+  --text2: #8892b0;
+  --text3: #546180;
+  --accent: #6c63ff;
+  --accent2: #a78bfa;
+  --cyan: #22d3ee;
+  --green: #10b981;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --glass: rgba(255,255,255,0.05);
+  --glass-border: rgba(255,255,255,0.1);
+  --shadow: 0 8px 32px rgba(0,0,0,0.4);
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; scroll-behavior: smooth; }
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Background Orbs ────────────────────────────────────────────── */
+.bg-orbs { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.18;
+}
+.orb-1 { width: 700px; height: 700px; background: var(--accent); top: -250px; left: -150px; animation: drift1 18s ease-in-out infinite; }
+.orb-2 { width: 600px; height: 600px; background: var(--cyan); bottom: -200px; right: -150px; animation: drift2 22s ease-in-out infinite; }
+.orb-3 { width: 500px; height: 500px; background: #ec4899; top: 40%; left: 40%; animation: drift3 26s ease-in-out infinite; }
+.orb-4 { width: 400px; height: 400px; background: var(--green); top: 60%; left: -10%; opacity: 0.1; animation: drift1 30s ease-in-out infinite reverse; }
+
+@keyframes drift1 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(60px,40px) scale(1.1); } }
+@keyframes drift2 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-50px,-30px) scale(1.08); } }
+@keyframes drift3 { 0%,100% { transform: translate(-50%,-50%) scale(1); } 50% { transform: translate(-50%,-50%) scale(1.15); } }
+
+/* ── Glass ──────────────────────────────────────────────────────── */
+.glass-card {
+  background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+}
+
+/* ── Navbar ─────────────────────────────────────────────────────── */
+.navbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 18px 48px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(5,8,16,0.6);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+  animation: slideDown 0.6s ease both;
+}
+@keyframes slideDown { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.nav-logo { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+.nav-logo-icon {
+  width: 38px; height: 38px;
+  background: linear-gradient(135deg, var(--accent), var(--cyan));
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+}
+.nav-logo-icon svg { width: 20px; height: 20px; color: #fff; }
+.nav-logo-name {
+  font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.15rem;
+  letter-spacing: 0.1em; color: #fff;
+}
+.nav-logo-sub { font-size: 0.68rem; color: var(--text3); letter-spacing: 0.05em; display: block; margin-top: -3px; }
+
+.nav-links { display: flex; align-items: center; gap: 32px; }
+.nav-links a {
+  color: var(--text2); text-decoration: none; font-size: 0.88rem; font-weight: 500;
+  transition: color 0.2s; letter-spacing: 0.02em;
+}
+.nav-links a:hover { color: var(--text); }
+
+.nav-cta { display: flex; align-items: center; gap: 12px; }
+.btn-ghost-sm {
+  padding: 8px 20px;
+  border: 1px solid var(--border2);
+  border-radius: 50px;
+  background: none;
+  color: var(--text2);
+  font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 500;
+  cursor: pointer; text-decoration: none;
+  transition: all 0.2s;
+  display: inline-flex; align-items: center;
+}
+.btn-ghost-sm:hover { background: var(--surface2); color: var(--text); border-color: var(--accent); }
+.btn-primary-sm {
+  padding: 8px 22px;
+  border-radius: 50px;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  border: none;
+  color: #fff;
+  font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; text-decoration: none;
+  transition: all 0.2s;
+  display: inline-flex; align-items: center; gap: 6px;
+  box-shadow: 0 0 24px rgba(108,99,255,0.4);
+}
+.btn-primary-sm:hover { transform: translateY(-1px); box-shadow: 0 0 36px rgba(108,99,255,0.6); }
+
+/* ── Hero ────────────────────────────────────────────────────────── */
+.hero {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 120px 48px 80px;
+  position: relative; z-index: 1;
+  text-align: center;
+}
+.hero-inner { max-width: 860px; }
+
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 16px 6px 8px;
+  border-radius: 50px;
+  background: rgba(108,99,255,0.12);
+  border: 1px solid rgba(108,99,255,0.3);
+  font-size: 0.78rem; font-weight: 500; color: var(--accent2);
+  margin-bottom: 32px;
+  animation: fadeUp 0.8s 0.1s ease both;
+}
+.hero-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s ease infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+
+.hero-title {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(2.8rem, 7vw, 5.2rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin-bottom: 24px;
+  animation: fadeUp 0.8s 0.2s ease both;
+}
+.hero-title .grad {
+  background: linear-gradient(135deg, var(--accent2), var(--cyan));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-sub {
+  font-size: 1.15rem; font-weight: 300; color: var(--text2); line-height: 1.7;
+  max-width: 600px; margin: 0 auto 40px;
+  animation: fadeUp 0.8s 0.3s ease both;
+}
+
+.hero-actions { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; animation: fadeUp 0.8s 0.4s ease both; }
+.btn-hero-primary {
+  padding: 14px 32px;
+  border-radius: 50px;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  border: none; color: #fff;
+  font-family: 'DM Sans', sans-serif; font-size: 0.95rem; font-weight: 600;
+  cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 8px;
+  box-shadow: 0 0 40px rgba(108,99,255,0.5);
+  transition: all 0.25s;
+}
+.btn-hero-primary:hover { transform: translateY(-2px); box-shadow: 0 0 60px rgba(108,99,255,0.7); }
+.btn-hero-ghost {
+  padding: 14px 32px;
+  border-radius: 50px;
+  background: none;
+  border: 1px solid var(--border2);
+  color: var(--text); text-decoration: none;
+  font-family: 'DM Sans', sans-serif; font-size: 0.95rem; font-weight: 500;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: all 0.25s;
+}
+.btn-hero-ghost:hover { background: var(--surface2); border-color: var(--accent); }
+
+.hero-stats {
+  display: flex; align-items: center; justify-content: center; gap: 48px;
+  margin-top: 64px; padding-top: 48px;
+  border-top: 1px solid var(--border);
+  animation: fadeUp 0.8s 0.5s ease both;
+  flex-wrap: wrap;
+}
+.hero-stat { text-align: center; }
+.hero-stat-num {
+  font-family: 'Syne', sans-serif; font-size: 2rem; font-weight: 800; color: #fff;
+  display: block; line-height: 1;
+  background: linear-gradient(135deg, var(--accent2), var(--cyan));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.hero-stat-label { font-size: 0.8rem; color: var(--text3); margin-top: 6px; display: block; letter-spacing: 0.05em; text-transform: uppercase; }
+
+@keyframes fadeUp { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* ── Live Demo Section ──────────────────────────────────────────── */
+.demo-section {
+  position: relative; z-index: 1;
+  padding: 80px 48px 100px;
+}
+.section-label {
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem; color: var(--accent2);
+  letter-spacing: 0.18em; text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.section-title {
+  text-align: center;
+  font-family: 'Syne', sans-serif; font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-weight: 700; color: #fff; margin-bottom: 14px;
+}
+.section-sub {
+  text-align: center; color: var(--text2); font-size: 1rem; line-height: 1.7;
+  max-width: 520px; margin: 0 auto 56px;
+}
+
+.demo-window {
+  max-width: 1100px; margin: 0 auto;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  overflow: hidden;
+  box-shadow: 0 40px 120px rgba(0,0,0,0.6), 0 0 60px rgba(108,99,255,0.08);
+  background: rgba(8,13,26,0.85);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+}
+.demo-titlebar {
+  padding: 14px 20px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 16px;
+}
+.demo-dots { display: flex; gap: 7px; }
+.demo-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+}
+.demo-dot-r { background: #ff5f57; }
+.demo-dot-y { background: #ffbd2e; }
+.demo-dot-g { background: #28c840; }
+.demo-titlebar-text {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+  color: var(--text3); flex: 1; text-align: center;
+}
+.demo-body { display: flex; height: 580px; }
+
+/* Demo Sidebar */
+.demo-sidebar {
+  width: 220px; flex-shrink: 0;
+  background: rgba(8,13,26,0.7);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  padding: 16px 0;
+}
+.demo-sidebar-logo {
+  display: flex; align-items: center; gap: 10px; padding: 0 16px 16px;
+  border-bottom: 1px solid var(--border); margin-bottom: 16px;
+}
+.demo-logo-icon {
+  width: 30px; height: 30px;
+  background: linear-gradient(135deg, var(--accent), var(--cyan));
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+}
+.demo-logo-icon svg { width: 16px; height: 16px; color: #fff; }
+.demo-logo-text { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 0.95rem; color: #fff; }
+
+.demo-stat-mini {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 12px 14px;
+  border-bottom: 1px solid var(--border); margin-bottom: 8px;
+}
+.dsm-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px;
+}
+.dsm-label { font-size: 0.6rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; display: block; }
+.dsm-val { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.9rem; color: #fff; }
+.dsm-card.accent .dsm-val { color: var(--accent2); }
+.dsm-card.warn .dsm-val { color: var(--yellow); }
+.dsm-card.danger .dsm-val { color: var(--red); }
+
+.demo-nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 16px;
+  border-radius: 8px; margin: 0 8px 2px; font-size: 0.8rem;
+  color: var(--text2); cursor: pointer; transition: all 0.15s;
+  border: 1px solid transparent;
+}
+.demo-nav-item.active {
+  background: rgba(108,99,255,0.15); color: var(--accent2);
+  border-color: rgba(108,99,255,0.2);
+}
+.demo-nav-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+/* Demo Main */
+.demo-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.demo-topbar {
+  padding: 12px 20px;
+  background: rgba(5,8,16,0.5); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.demo-topbar-title { font-family: 'Syne', sans-serif; font-size: 0.95rem; font-weight: 700; color: #fff; }
+.demo-search {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 50px; padding: 6px 14px; font-size: 0.78rem; color: var(--text3);
+}
+.demo-search svg { width: 12px; height: 12px; }
+.demo-content { flex: 1; overflow: hidden; position: relative; }
+
+/* Chat tab content */
+.demo-chat { display: flex; flex-direction: column; height: 100%; padding: 16px; }
+.demo-msgs { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 12px; }
+.demo-msg-aria {
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.demo-avatar {
+  width: 28px; height: 28px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent), var(--cyan));
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+}
+.demo-avatar svg { width: 14px; height: 14px; color: #fff; }
+.demo-bubble-aria {
+  background: rgba(108,99,255,0.12); border: 1px solid rgba(108,99,255,0.2);
+  border-radius: 0 12px 12px 12px; padding: 10px 14px;
+  font-size: 0.78rem; color: var(--text2); line-height: 1.6; max-width: 380px;
+}
+.demo-bubble-aria strong { color: var(--text); display: block; margin-bottom: 4px; font-size: 0.82rem; }
+
+.demo-msg-user { display: flex; justify-content: flex-end; }
+.demo-bubble-user {
+  background: rgba(255,255,255,0.08); border: 1px solid var(--border);
+  border-radius: 12px 0 12px 12px; padding: 10px 14px;
+  font-size: 0.78rem; color: var(--text); max-width: 260px;
+}
+
+.demo-typing {
+  display: flex; gap: 10px; align-items: center;
+}
+.demo-typing-dots {
+  display: flex; gap: 4px; padding: 10px 14px;
+  background: rgba(108,99,255,0.08); border: 1px solid rgba(108,99,255,0.15);
+  border-radius: 0 12px 12px 12px;
+}
+.typing-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent2);
+  animation: typingBounce 1.4s ease infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typingBounce { 0%,60%,100% { transform: translateY(0); opacity:0.4; } 30% { transform: translateY(-6px); opacity:1; } }
+
+.demo-input-row {
+  display: flex; gap: 8px; align-items: center; margin-top: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 8px 12px;
+}
+.demo-input-fake { flex: 1; font-size: 0.78rem; color: var(--text3); }
+.demo-input-send {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  display: flex; align-items: center; justify-content: center;
+}
+.demo-input-send svg { width: 13px; height: 13px; color: #fff; }
+
+/* Tab switcher */
+.demo-tabs {
+  display: flex; gap: 2px; padding: 0 20px;
+  background: rgba(8,13,26,0.5); border-bottom: 1px solid var(--border);
+}
+.demo-tab {
+  padding: 9px 14px; font-size: 0.75rem; color: var(--text3);
+  border-bottom: 2px solid transparent; cursor: pointer;
+  transition: all 0.2s; white-space: nowrap;
+}
+.demo-tab.active { color: var(--accent2); border-bottom-color: var(--accent2); }
+
+/* Analytics tab */
+.demo-analytics { padding: 14px 16px; height: 100%; overflow: hidden; }
+.demo-kpi-row { display: flex; gap: 10px; margin-bottom: 14px; }
+.demo-kpi {
+  flex: 1; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px;
+}
+.demo-kpi-icon { font-size: 1.1rem; margin-bottom: 4px; }
+.demo-kpi-val { font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 700; color: #fff; }
+.demo-kpi-label { font-size: 0.68rem; color: var(--text3); }
+
+.demo-chart-area {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px; height: 180px;
+}
+.demo-chart-title { font-size: 0.75rem; color: var(--text2); margin-bottom: 10px; font-weight: 500; }
+.demo-bars { display: flex; align-items: flex-end; gap: 8px; height: 120px; }
+.demo-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+.demo-bar {
+  width: 100%; background: linear-gradient(180deg, var(--accent), rgba(108,99,255,0.3));
+  border-radius: 4px 4px 0 0; transition: height 0.5s ease;
+}
+.demo-bar-label { font-size: 0.6rem; color: var(--text3); white-space: nowrap; }
+
+/* Products tab */
+.demo-products { overflow: hidden; }
+.demo-table-header {
+  display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
+  padding: 10px 16px; font-size: 0.68rem; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.07em;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+}
+.demo-table-row {
+  display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
+  padding: 10px 16px; font-size: 0.78rem; color: var(--text2);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s;
+}
+.demo-table-row:hover { background: rgba(255,255,255,0.03); }
+.demo-badge {
+  display: inline-flex; align-items: center; padding: 2px 8px;
+  border-radius: 50px; font-size: 0.65rem; font-weight: 600;
+}
+.badge-green { background: rgba(16,185,129,0.15); color: var(--green); }
+.badge-yellow { background: rgba(245,158,11,0.15); color: var(--yellow); }
+.badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
+
+/* animated cursor in input */
+.cursor-blink { animation: blink 1s step-end infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ── Features ────────────────────────────────────────────────────── */
+.features-section {
+  position: relative; z-index: 1;
+  padding: 80px 48px 100px;
+}
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  max-width: 1100px; margin: 0 auto;
+}
+@media (max-width: 900px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .features-grid { grid-template-columns: 1fr; } }
+
+.feature-card {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 20px; padding: 28px;
+  transition: all 0.3s; position: relative; overflow: hidden;
+}
+.feature-card::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(108,99,255,0.05), transparent);
+  opacity: 0; transition: opacity 0.3s;
+}
+.feature-card:hover { border-color: rgba(108,99,255,0.3); transform: translateY(-4px); box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+.feature-card:hover::before { opacity: 1; }
+
+.feature-icon {
+  width: 48px; height: 48px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 18px; font-size: 1.4rem;
+}
+.fi-purple { background: rgba(108,99,255,0.15); border: 1px solid rgba(108,99,255,0.2); }
+.fi-cyan { background: rgba(34,211,238,0.12); border: 1px solid rgba(34,211,238,0.2); }
+.fi-green { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.2); }
+.fi-yellow { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.2); }
+.fi-pink { background: rgba(236,72,153,0.12); border: 1px solid rgba(236,72,153,0.2); }
+.fi-blue { background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.2); }
+
+.feature-title {
+  font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1rem;
+  color: #fff; margin-bottom: 10px;
+}
+.feature-desc { font-size: 0.85rem; color: var(--text2); line-height: 1.65; }
+
+/* ── How it works ────────────────────────────────────────────────── */
+.how-section {
+  position: relative; z-index: 1; padding: 80px 48px 100px;
+}
+.steps-row {
+  display: flex; align-items: flex-start; gap: 0;
+  max-width: 900px; margin: 0 auto; position: relative;
+}
+.steps-row::before {
+  content: '';
+  position: absolute; top: 28px; left: calc(16.7% + 28px); right: calc(16.7% + 28px);
+  height: 1px; background: linear-gradient(90deg, var(--accent), var(--cyan));
+  opacity: 0.3;
+}
+.step { flex: 1; text-align: center; padding: 0 20px; }
+.step-num {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: rgba(108,99,255,0.12); border: 1px solid rgba(108,99,255,0.3);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 18px;
+  font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.1rem;
+  color: var(--accent2);
+  position: relative; z-index: 1;
+}
+.step-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 0.95rem; color: #fff; margin-bottom: 8px; }
+.step-desc { font-size: 0.82rem; color: var(--text2); line-height: 1.6; }
+
+/* ── CTA ─────────────────────────────────────────────────────────── */
+.cta-section {
+  position: relative; z-index: 1; padding: 80px 48px 120px;
+}
+.cta-card {
+  max-width: 800px; margin: 0 auto;
+  text-align: center;
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(32px); -webkit-backdrop-filter: blur(32px);
+  border: 1px solid var(--border2);
+  border-radius: 28px;
+  padding: 72px 48px;
+  position: relative; overflow: hidden;
+}
+.cta-card::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(108,99,255,0.15), transparent 60%);
+}
+.cta-card-inner { position: relative; }
+.cta-title { font-family: 'Syne', sans-serif; font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800; color: #fff; margin-bottom: 16px; }
+.cta-sub { font-size: 1rem; color: var(--text2); margin-bottom: 40px; line-height: 1.7; }
+
+/* ── Footer ──────────────────────────────────────────────────────── */
+footer {
+  position: relative; z-index: 1;
+  padding: 32px 48px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 16px;
+}
+.footer-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.footer-copy { font-size: 0.8rem; color: var(--text3); }
+.footer-links { display: flex; gap: 24px; }
+.footer-links a { font-size: 0.8rem; color: var(--text3); text-decoration: none; transition: color 0.2s; }
+.footer-links a:hover { color: var(--text2); }
+
+.ai-badge {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.72rem; color: var(--text3);
+}
+.ai-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 8px var(--green);
+  animation: pulse 2s ease infinite;
+}
+
+/* ── Scroll reveal ───────────────────────────────────────────────── */
+.reveal {
+  opacity: 0; transform: translateY(30px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+.reveal.visible { opacity: 1; transform: translateY(0); }
+
+/* ── Responsive ──────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .navbar { padding: 16px 20px; }
+  .nav-links { display: none; }
+  .hero { padding: 110px 20px 60px; }
+  .hero-stats { gap: 24px; }
+  .demo-section, .features-section, .how-section, .cta-section { padding: 60px 20px 80px; }
+  .demo-sidebar { display: none; }
+  .steps-row { flex-direction: column; align-items: center; gap: 32px; }
+  .steps-row::before { display: none; }
+  footer { padding: 24px 20px; flex-direction: column; align-items: flex-start; }
+  .cta-card { padding: 48px 24px; }
+  .demo-body { height: 460px; }
+}
+
+/* ── Tab interactivity ───────────────────────────────────────────── */
+.tab-content { display: none; height: 100%; }
+.tab-content.active { display: block; }
+</style>
+</head>
+<body>
+
+<!-- Background Orbs -->
+<div class="bg-orbs">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+  <div class="orb orb-4"></div>
+</div>
+
+<!-- Navbar -->
+<nav class="navbar">
+  <a href="#" class="nav-logo">
+    <div class="nav-logo-icon">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+    </div>
+    <div>
+      <span class="nav-logo-name">ARIA</span>
+      <span class="nav-logo-sub">Inventory AI</span>
+    </div>
+  </a>
+
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#demo">Live Demo</a>
+    <a href="#how">How It Works</a>
+  </div>
+
+  <div class="nav-cta">
+    <a href="/login" class="btn-ghost-sm">Sign In</a>
+    <a href="/login" class="btn-primary-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+      Get Started
+    </a>
+  </div>
+</nav>
+
+<!-- ── HERO ───────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge">
+      <div class="hero-badge-dot"></div>
+      Powered by Llama 3.1 · AI-Native Inventory
+    </div>
+
+    <h1 class="hero-title">
+      The Inventory System<br>
+      That <span class="grad">Thinks for You</span>
+    </h1>
+
+    <p class="hero-sub">
+      ARIA is an AI-powered inventory management copilot. It doesn't just track stock — it analyses patterns, predicts demand, flags anomalies, and answers your questions in plain language.
+    </p>
+
+    <div class="hero-actions">
+      <a href="/login" class="btn-hero-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+        Launch ARIA
+      </a>
+      <a href="#demo" class="btn-hero-ghost">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+        See it live
+      </a>
+    </div>
+
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <span class="hero-stat-num">AI</span>
+        <span class="hero-stat-label">Natural Language</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-num">Real‑time</span>
+        <span class="hero-stat-label">Stock Analytics</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-num">Voice</span>
+        <span class="hero-stat-label">Input Support</span>
+      </div>
+      <div class="hero-stat">
+        <span class="hero-stat-num">CSV</span>
+        <span class="hero-stat-label">Import / Export</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── LIVE DEMO ──────────────────────────────────────────────────── -->
+<section class="demo-section" id="demo">
+  <p class="section-label reveal">Interactive Preview</p>
+  <h2 class="section-title reveal">See ARIA in Action</h2>
+  <p class="section-sub reveal">Explore the actual interface. Switch between panels to get a feel for the full system.</p>
+
+  <div class="demo-window reveal">
+    <!-- Title Bar -->
+    <div class="demo-titlebar">
+      <div class="demo-dots">
+        <div class="demo-dot demo-dot-r"></div>
+        <div class="demo-dot demo-dot-y"></div>
+        <div class="demo-dot demo-dot-g"></div>
+      </div>
+      <div class="demo-titlebar-text">ARIA — AI Inventory System</div>
+    </div>
+
+    <!-- App Body -->
+    <div class="demo-body">
+      <!-- Sidebar -->
+      <div class="demo-sidebar">
+        <div class="demo-sidebar-logo">
+          <div class="demo-logo-icon">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          </div>
+          <span class="demo-logo-text">ARIA</span>
+        </div>
+
+        <div class="demo-stat-mini">
+          <div class="dsm-card"><span class="dsm-label">Products</span><span class="dsm-val">48</span></div>
+          <div class="dsm-card accent"><span class="dsm-label">Value</span><span class="dsm-val">$92k</span></div>
+          <div class="dsm-card warn"><span class="dsm-label">Low</span><span class="dsm-val">6</span></div>
+          <div class="dsm-card danger"><span class="dsm-label">Out</span><span class="dsm-val">2</span></div>
+        </div>
+
+        <div class="demo-nav-item active" data-tab="chat" onclick="switchDemoTab('chat')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          AI Assistant
+        </div>
+        <div class="demo-nav-item" data-tab="analytics" onclick="switchDemoTab('analytics')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Analytics
+        </div>
+        <div class="demo-nav-item" data-tab="products" onclick="switchDemoTab('products')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          Products
+        </div>
+      </div>
+
+      <!-- Main -->
+      <div class="demo-main">
+        <!-- Top Bar -->
+        <div class="demo-topbar">
+          <span class="demo-topbar-title" id="demoPageTitle">AI Assistant</span>
+          <div class="demo-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            Search inventory…
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="demo-tabs">
+          <div class="demo-tab active" id="tab-chat" onclick="switchDemoTab('chat')">Chat</div>
+          <div class="demo-tab" id="tab-analytics" onclick="switchDemoTab('analytics')">Analytics</div>
+          <div class="demo-tab" id="tab-products" onclick="switchDemoTab('products')">Products</div>
+        </div>
+
+        <!-- Tab Contents -->
+        <div class="demo-content">
+
+          <!-- Chat Tab -->
+          <div class="tab-content active" id="tchat">
+            <div class="demo-chat">
+              <div class="demo-msgs" id="demoMsgs">
+
+                <div class="demo-msg-aria">
+                  <div class="demo-avatar">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5"/></svg>
+                  </div>
+                  <div class="demo-bubble-aria">
+                    <strong>Hello, I'm ARIA</strong>
+                    Your AI-powered inventory copilot. I analyse, predict, and advise. Try asking me something below.
+                  </div>
+                </div>
+
+                <div class="demo-msg-user">
+                  <div class="demo-bubble-user">Which products should I restock this week?</div>
+                </div>
+
+                <div class="demo-msg-aria">
+                  <div class="demo-avatar">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5"/></svg>
+                  </div>
+                  <div class="demo-bubble-aria">
+                    <strong>📦 Restock Recommendations</strong>
+                    Based on usage patterns, I recommend restocking: <b>USB Keyboards</b> (4 left, 7-day lead), <b>HDMI Cables</b> (2 left — critical!), and <b>Wireless Mice</b> (6 left, trending up).
+                  </div>
+                </div>
+
+                <div class="demo-msg-aria" id="demoTypingRow" style="display:none">
+                  <div class="demo-avatar">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5"/></svg>
+                  </div>
+                  <div class="demo-typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="demo-input-row">
+                <span class="demo-input-fake" id="demoInputText">Ask ARIA anything…<span class="cursor-blink">|</span></span>
+                <div class="demo-input-send">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Analytics Tab -->
+          <div class="tab-content" id="tanalytics">
+            <div class="demo-analytics">
+              <div class="demo-kpi-row">
+                <div class="demo-kpi">
+                  <div class="demo-kpi-icon">📦</div>
+                  <div class="demo-kpi-val">48</div>
+                  <div class="demo-kpi-label">Total Products</div>
+                </div>
+                <div class="demo-kpi">
+                  <div class="demo-kpi-icon">💰</div>
+                  <div class="demo-kpi-val">$92,400</div>
+                  <div class="demo-kpi-label">Inventory Value</div>
+                </div>
+                <div class="demo-kpi">
+                  <div class="demo-kpi-icon">⚡</div>
+                  <div class="demo-kpi-val">312</div>
+                  <div class="demo-kpi-label">Transactions</div>
+                </div>
+                <div class="demo-kpi">
+                  <div class="demo-kpi-icon">⚠️</div>
+                  <div class="demo-kpi-val">8</div>
+                  <div class="demo-kpi-label">Low/Out Stock</div>
+                </div>
+              </div>
+              <div class="demo-chart-area">
+                <div class="demo-chart-title">Stock Movements — Last 7 Days</div>
+                <div class="demo-bars" id="demoBars"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Products Tab -->
+          <div class="tab-content" id="tproducts">
+            <div class="demo-products">
+              <div class="demo-table-header">
+                <span>Product</span>
+                <span>Category</span>
+                <span>Qty</span>
+                <span>Status</span>
+              </div>
+              <div class="demo-table-row">
+                <span style="color:var(--text)">MacBook Pro 14"</span>
+                <span>Electronics</span>
+                <span style="color:#fff;font-weight:600">15</span>
+                <span><span class="demo-badge badge-green">In Stock</span></span>
+              </div>
+              <div class="demo-table-row">
+                <span style="color:var(--text)">USB Keyboards</span>
+                <span>Peripherals</span>
+                <span style="color:#fff;font-weight:600">4</span>
+                <span><span class="demo-badge badge-yellow">Low Stock</span></span>
+              </div>
+              <div class="demo-table-row">
+                <span style="color:var(--text)">HDMI Cables</span>
+                <span>Accessories</span>
+                <span style="color:#fff;font-weight:600">0</span>
+                <span><span class="demo-badge badge-red">Out of Stock</span></span>
+              </div>
+              <div class="demo-table-row">
+                <span style="color:var(--text)">Wireless Mice</span>
+                <span>Peripherals</span>
+                <span style="color:#fff;font-weight:600">22</span>
+                <span><span class="demo-badge badge-green">In Stock</span></span>
+              </div>
+              <div class="demo-table-row">
+                <span style="color:var(--text)">27" Monitors</span>
+                <span>Electronics</span>
+                <span style="color:#fff;font-weight:600">7</span>
+                <span><span class="demo-badge badge-green">In Stock</span></span>
+              </div>
+              <div class="demo-table-row">
+                <span style="color:var(--text)">USB-C Hubs</span>
+                <span>Accessories</span>
+                <span style="color:#fff;font-weight:600">3</span>
+                <span><span class="demo-badge badge-yellow">Low Stock</span></span>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- demo-content -->
+      </div><!-- demo-main -->
+    </div><!-- demo-body -->
+  </div><!-- demo-window -->
+</section>
+
+<!-- ── FEATURES ────────────────────────────────────────────────────── -->
+<section class="features-section" id="features">
+  <p class="section-label reveal">What ARIA Does</p>
+  <h2 class="section-title reveal">Everything Your Inventory Needs</h2>
+  <p class="section-sub reveal">A complete intelligent system — not just a spreadsheet with a search bar.</p>
+
+  <div class="features-grid">
+    <div class="feature-card reveal">
+      <div class="feature-icon fi-purple">🤖</div>
+      <div class="feature-title">AI Chat Assistant</div>
+      <div class="feature-desc">Ask ARIA anything in plain English. Get health reports, restock predictions, dead-stock alerts, and full inventory analysis — instantly.</div>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon fi-cyan">📊</div>
+      <div class="feature-title">Real-Time Analytics</div>
+      <div class="feature-desc">Live KPI dashboards with category breakdowns, stock movement charts, top movers, and low-stock intel panels.</div>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon fi-green">🎙️</div>
+      <div class="feature-title">Voice Input</div>
+      <div class="feature-desc">Speak your queries and commands. ARIA transcribes, understands, and responds — hands-free inventory management.</div>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon fi-yellow">🔔</div>
+      <div class="feature-title">Smart Notifications</div>
+      <div class="feature-desc">Proactive alerts for low stock, out-of-stock, expiring products, anomalies, and AI-generated reorder recommendations.</div>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon fi-pink">📂</div>
+      <div class="feature-title">CSV Import / Export</div>
+      <div class="feature-desc">Bulk import products via CSV with drag-and-drop. Export full inventory with one click. Downloadable templates included.</div>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon fi-blue">📋</div>
+      <div class="feature-title">Transaction History</div>
+      <div class="feature-desc">Every stock addition, removal, and adjustment is logged with filters, date ranges, and CSV export for full audit trails.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── HOW IT WORKS ───────────────────────────────────────────────── -->
+<section class="how-section" id="how">
+  <p class="section-label reveal">Simple by Design</p>
+  <h2 class="section-title reveal">How It Works</h2>
+  <p class="section-sub reveal">Up and running in minutes. No training data, no configuration wizards.</p>
+
+  <div class="steps-row reveal">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-title">Sign In</div>
+      <div class="step-desc">Create your account or log in securely. Role-based access keeps your team in sync.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-title">Add Products</div>
+      <div class="step-desc">Import via CSV or add manually. ARIA indexes everything instantly and starts monitoring.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-title">Ask ARIA</div>
+      <div class="step-desc">Type or speak your questions. ARIA provides real AI insights based on your actual data.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ────────────────────────────────────────────────────────── -->
+<section class="cta-section">
+  <div class="cta-card reveal">
+    <div class="cta-card-inner">
+      <h2 class="cta-title">Ready to upgrade your inventory?</h2>
+      <p class="cta-sub">ARIA replaces spreadsheets, manual tracking, and guesswork with an AI that actually understands your stock.</p>
+      <div style="display:flex;justify-content:center;gap:14px;flex-wrap:wrap">
+        <a href="/login" class="btn-hero-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+          Open ARIA Now
+        </a>
+      </div>
+      <div class="ai-badge" style="justify-content:center;margin-top:28px">
+        <div class="ai-dot"></div>
+        <span>Powered by Llama 3.1</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────────── -->
+<footer>
+  <a href="#" class="footer-logo">
+    <div class="nav-logo-icon">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+    </div>
+    <span class="nav-logo-name" style="font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;color:#fff">ARIA</span>
+  </a>
+  <span class="footer-copy">© 2025 ARIA — AI Inventory System. All rights reserved.</span>
+  <div class="footer-links">
+    <a href="/login">Login</a>
+    <a href="#demo">Demo</a>
+    <a href="#features">Features</a>
+  </div>
+</footer>
+
+<script>
+/* ── Demo Tab Switcher ───────────────────────────────────────────── */
+function switchDemoTab(tab) {
+  // Tabs bar
+  document.querySelectorAll('.demo-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tab)?.classList.add('active');
+  // Tab contents
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('t' + tab)?.classList.add('active');
+  // Sidebar nav
+  document.querySelectorAll('.demo-nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelector(`.demo-nav-item[data-tab="${tab}"]`)?.classList.add('active');
+  // Page title
+  const titles = { chat: 'AI Assistant', analytics: 'Analytics', products: 'Products' };
+  document.getElementById('demoPageTitle').textContent = titles[tab] || tab;
+}
+
+/* ── Build Demo Chart Bars ──────────────────────────────────────── */
+const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const vals = [65, 82, 48, 91, 73, 55, 88];
+const maxV = Math.max(...vals);
+const barsEl = document.getElementById('demoBars');
+days.forEach((d,i) => {
+  const pct = Math.round((vals[i]/maxV)*100);
+  barsEl.innerHTML += `<div class="demo-bar-wrap">
+    <div class="demo-bar" style="height:${pct}%"></div>
+    <span class="demo-bar-label">${d}</span>
+  </div>`;
+});
+
+/* ── Demo Chat Typewriter ────────────────────────────────────────── */
+const prompts = [
+  "Give me a full health report",
+  "Which items are low on stock?",
+  "Show me dead stock items",
+  "Predict restock for next week",
+];
+const replies = [
+  "📊 Inventory is in good shape overall. 92% of SKUs are in stock. 6 items below threshold — I've flagged them for reorder. Dead stock: 3 items with zero movement for 30+ days.",
+  "⚠️ 6 items need attention: USB Keyboards (4), HDMI Cables (0 — out!), USB-C Hubs (3), AA Batteries (5), Ethernet Cables (2), Tape Rolls (1).",
+  "💀 Dead Stock detected: Screen Cleaners (0 movement, 45 days), CD-ROMs (0 movement, 90 days), VGA Adapters (0 movement, 60 days). Consider discounting.",
+  "🔮 Restock needed within 7 days: HDMI Cables (order 50+), USB Keyboards (order 20), USB-C Hubs (order 15). Based on current velocity and supplier lead times.",
+];
+let promptIdx = 0;
+let charIdx = 0;
+let isTyping = false;
+let phase = 'idle';
+
+function runDemoConversation() {
+  if (phase === 'idle') {
+    phase = 'typing-prompt';
+    charIdx = 0;
+    isTyping = true;
+    document.getElementById('demoInputText').innerHTML = '<span class="cursor-blink">|</span>';
+    typePrompt();
+  }
+}
+
+function typePrompt() {
+  const prompt = prompts[promptIdx % prompts.length];
+  if (charIdx <= prompt.length) {
+    document.getElementById('demoInputText').innerHTML = prompt.slice(0, charIdx) + '<span class="cursor-blink">|</span>';
+    charIdx++;
+    setTimeout(typePrompt, 50);
+  } else {
+    setTimeout(showTypingIndicator, 600);
+  }
+}
+
+function showTypingIndicator() {
+  // Add user msg
+  const msgs = document.getElementById('demoMsgs');
+  const userMsg = document.createElement('div');
+  userMsg.className = 'demo-msg-user';
+  userMsg.innerHTML = `<div class="demo-bubble-user">${prompts[promptIdx % prompts.length]}</div>`;
+  msgs.appendChild(userMsg);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  document.getElementById('demoInputText').innerHTML = '<span class="cursor-blink">|</span>';
+  document.getElementById('demoTypingRow').style.display = 'flex';
+  msgs.scrollTop = msgs.scrollHeight;
+
+  setTimeout(() => {
+    document.getElementById('demoTypingRow').style.display = 'none';
+    // Add ARIA reply
+    const ariaMsg = document.createElement('div');
+    ariaMsg.className = 'demo-msg-aria';
+    ariaMsg.innerHTML = `<div class="demo-avatar"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5"/></svg></div>
+    <div class="demo-bubble-aria">${replies[promptIdx % replies.length]}</div>`;
+    msgs.appendChild(ariaMsg);
+    msgs.scrollTop = msgs.scrollHeight;
+
+    // Keep max 6 messages
+    const allMsgs = msgs.querySelectorAll('.demo-msg-aria, .demo-msg-user');
+    if (allMsgs.length > 6) {
+      allMsgs[0].remove(); allMsgs[1]?.remove();
+    }
+
+    promptIdx++;
+    phase = 'idle';
+    setTimeout(runDemoConversation, 3200);
+  }, 1800);
+}
+
+setTimeout(runDemoConversation, 2000);
+
+/* ── Scroll Reveal ───────────────────────────────────────────────── */
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach((e, i) => {
+    if (e.isIntersecting) {
+      const delay = e.target.closest('.features-grid') || e.target.closest('.steps-row') ? 0 : 0;
+      setTimeout(() => e.target.classList.add('visible'), delay);
+      observer.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.12 });
+
+document.querySelectorAll('.reveal').forEach((el, i) => {
+  el.style.transitionDelay = (i % 3) * 0.08 + 's';
+  observer.observe(el);
+});
+</script>
+
+</body>
+</html>
