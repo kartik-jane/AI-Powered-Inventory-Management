@@ -129,8 +129,16 @@ aria_upgraded/
 ├── requirements.txt
 ├── .env.example
 ├── templates/
-│   ├── login.html            ← NEW: login page
-│   └── index.html            ← Upgraded: new panels added
+│   ├── login.html           
+│   ├── base.html           
+│   ├── chat.html           
+│   ├── add_product.html           
+│   ├── analytics.html           
+│   ├── homepage.html           
+│   ├── import_export.html          
+│   ├── products.html           
+│   ├── transactions.html           
+│   └── index.html            
 └── static/
     ├── css/
     │   └── style.css         ← Original + new styles appended
