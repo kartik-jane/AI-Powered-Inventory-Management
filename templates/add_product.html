@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Add Product{% endblock %}
+{% block page_title %}Add Product{% endblock %}
+{% block nav_add %}active{% endblock %}
+
+{% block panel %}
+<div class="form-container">
+  <h2 class="form-title" id="formTitle">Add New Product</h2>
+  <input type="hidden" id="editProductId">
+
+  <!-- Image Upload -->
+  <div class="image-upload-zone" id="imageUploadZone">
+    <img id="productImagePreview" src="" alt="" style="display:none">
+    <div id="imageUploadPrompt">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:32px;height:32px;color:var(--text3)"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      <p>Click to add product image</p>
+      <span>PNG, JPG, WebP — max 5MB</span>
+    </div>
+    <input type="file" id="imageFileInput" accept="image/*" style="display:none">
+  </div>
+
+  <div class="form-grid">
+    <div class="form-group">
+      <label>Product Name *</label>
+      <input type="text" id="fName" placeholder="e.g. Wireless Keyboard">
+    </div>
+    <div class="form-group">
+      <label>SKU *</label>
+      <input type="text" id="fSku" placeholder="e.g. ELEC-001">
+    </div>
+    <div class="form-group">
+      <label>Category</label>
+      <input type="text" id="fCategory" placeholder="e.g. Electronics">
+    </div>
+    <div class="form-group">
+      <label>Quantity</label>
+      <input type="number" id="fQty" placeholder="0" min="0">
+    </div>
+    <div class="form-group">
+      <label>Unit Price ($)</label>
+      <input type="number" id="fPrice" placeholder="0.00" step="0.01" min="0">
+    </div>
+    <div class="form-group">
+      <label>Cost Price ($) <span style="color:var(--text3);font-size:0.78rem">(for profit calc)</span></label>
+      <input type="number" id="fCostPrice" placeholder="0.00" step="0.01" min="0">
+    </div>
+    <div class="form-group">
+      <label>Supplier</label>
+      <input type="text" id="fSupplier" placeholder="Supplier name">
+    </div>
+    <div class="form-group">
+      <label>Supplier Lead Days</label>
+      <input type="number" id="fLeadDays" placeholder="7" min="1">
+    </div>
+    <div class="form-group">
+      <label>Low Stock Threshold</label>
+      <input type="number" id="fThreshold" placeholder="10" min="0">
+    </div>
+    <div class="form-group">
+      <label>Expiry Date <span style="color:var(--text3);font-size:0.78rem">(optional)</span></label>
+      <input type="date" id="fExpiry">
+    </div>
+    <div class="form-group full-width">
+      <label>Description</label>
+      <textarea id="fDescription" rows="3" placeholder="Optional product description..."></textarea>
+    </div>
+  </div>
+  <div class="form-actions">
+    <button class="btn-ghost" onclick="clearForm()">Clear</button>
+    <button class="btn-primary" id="saveProductBtn" onclick="saveProduct()">Save Product</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    setupImageUpload();
+    // Check if editing an existing product via URL param
+    const params = new URLSearchParams(window.location.search);
+    const editId = params.get('edit');
+    if (editId) {
+      loadProductForEdit(parseInt(editId));
+    }
+  });
+</script>
+{% endblock %}

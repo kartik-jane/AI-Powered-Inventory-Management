@@ -198,11 +198,40 @@ def api_me():
     return jsonify({'username': session.get('username'), 'role': session.get('role')})
 
 # ─── Main Route ────────────────────────────────────────────────────────────────
-
 @app.route('/')
 @login_required
 def index():
-    return render_template('index.html')
+    return redirect(url_for('page_chat'))
+ 
+@app.route('/chat')
+@login_required
+def page_chat():
+    return render_template('chat.html')
+ 
+@app.route('/analytics')
+@login_required
+def page_analytics():
+    return render_template('analytics.html')
+ 
+@app.route('/products')
+@login_required
+def page_products():
+    return render_template('products.html')
+ 
+@app.route('/add-product')
+@login_required
+def page_add_product():
+    return render_template('add_product.html')
+ 
+@app.route('/transactions')
+@login_required
+def page_transactions():
+    return render_template('transactions.html')
+ 
+@app.route('/import-export')
+@login_required
+def page_import_export():
+    return render_template('import_export.html')
 
 # ─── Product Routes ────────────────────────────────────────────────────────────
 

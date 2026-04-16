@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Products{% endblock %}
+{% block page_title %}Products{% endblock %}
+{% block nav_products %}active{% endblock %}
+
+{% block panel %}
+<div class="panel-header">
+  <div class="filter-row">
+    <input type="text" class="filter-input" id="productSearch" placeholder="Search products...">
+    <select class="filter-select" id="categoryFilter">
+      <option value="">All Categories</option>
+    </select>
+    <select class="filter-select" id="statusFilter">
+      <option value="">All Status</option>
+      <option value="ok">In Stock</option>
+      <option value="low">Low Stock</option>
+      <option value="out">Out of Stock</option>
+    </select>
+    <a class="btn-primary" href="{{ url_for('page_add_product') }}">+ Add Product</a>
+  </div>
+</div>
+<div class="table-wrap">
+  <table class="glass-table">
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th>SKU</th>
+        <th>Category</th>
+        <th>Qty</th>
+        <th>Price</th>
+        <th>Cost</th>
+        <th>Value</th>
+        <th>Expiry</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="productTableBody">
+      <tr><td colspan="10" class="loading-cell">Loading products...</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    loadProducts();
+    setupStockModal();
+  });
+</script>
+{% endblock %}

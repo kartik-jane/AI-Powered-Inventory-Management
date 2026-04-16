@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}AI Assistant{% endblock %}
+{% block page_title %}AI Assistant{% endblock %}
+{% block nav_chat %}active{% endblock %}
+
+{% block panel %}
+<div class="chat-container">
+  <div class="chat-messages" id="chatMessages">
+    <div class="chat-welcome">
+      <div class="welcome-avatar">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5"/></svg>
+      </div>
+      <h2>Hello, I'm ARIA</h2>
+      <p>Your AI-powered inventory copilot. I don't just execute commands — I analyse, predict, and advise. Ask me anything.</p>
+      <div class="quick-prompts">
+        <button class="quick-btn" data-prompt="Give me a full inventory health report with insights and recommendations">📊 Health Report</button>
+        <button class="quick-btn" data-prompt="Which items should I restock this week? Predict based on usage patterns.">🔮 Restock Predictions</button>
+        <button class="quick-btn" data-prompt="Show me dead stock items and what I should do about them">💀 Dead Stock</button>
+        <button class="quick-btn" data-prompt="What are my fastest and slowest moving products? Any anomalies?">⚡ Fast vs Slow Movers</button>
+        <button class="quick-btn" data-prompt="Add a new product: MacBook Pro 14 inch, SKU ELEC-010, Electronics category, quantity 15, price $1999, cost $1200, supplier Apple Inc">➕ Add Sample</button>
+        <button class="quick-btn" data-prompt="Which items are low on stock or out of stock right now?">⚠️ Stock Alerts</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inline Voice Status Bar -->
+  <div class="voice-inline-bar" id="voiceInlineBar">
+    <div class="voice-inline-avatar" id="voiceInlineAvatar">
+      <div class="voice-rings">
+        <div class="vring vring-1"></div><div class="vring vring-2"></div><div class="vring vring-3"></div>
+      </div>
+      <div class="voice-avatar-core">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>
+    <div class="voice-inline-info">
+      <span class="voice-inline-label" id="voiceInlineLabel">🎙️ Listening…</span>
+      <div class="voice-waveform voice-inline-wave" id="voiceInlineWave">
+        <span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="chat-input-area">
+    <div class="chat-input-wrap">
+      <textarea id="chatInput" placeholder="Ask ARIA anything… 'What should I restock?' or 'Add 50 units of Keyboard'" rows="1"></textarea>
+      <button class="voice-inline-btn" id="voiceInlineBtn" title="Start voice conversation">
+        <svg class="mic-idle-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="9" y="2" width="6" height="12" rx="3"/>
+          <path d="M5 10a7 7 0 0014 0M12 19v3M8 22h8"/>
+        </svg>
+        <svg class="mic-rec-i" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+          <circle cx="12" cy="12" r="8" opacity="0.3"/>
+          <circle cx="12" cy="12" r="5"/>
+        </svg>
+      </button>
+      <button class="send-btn" id="sendBtn" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+      </button>
+      <button class="voice-stop-inline-btn" id="voiceStopInlineBtn" style="display:none" title="Stop voice conversation">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+      </button>
+    </div>
+    <p class="chat-hint">ARIA is your inventory copilot — it advises, predicts, and executes inventory operations</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    setupChat();
+    setupVoice();
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARIA — {% block title %}AI Inventory System{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="bg-orbs">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <span class="logo-name">ARIA</span>
+        <span class="logo-sub">Inventory AI</span>
+      </div>
+    </div>
+    <button class="sidebar-toggle" id="sidebarToggle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </button>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card">
+      <span class="stat-label">Products</span>
+      <span class="stat-value" id="statTotal">—</span>
+    </div>
+    <div class="stat-card accent">
+      <span class="stat-label">Value</span>
+      <span class="stat-value" id="statValue">—</span>
+    </div>
+    <div class="stat-card warn">
+      <span class="stat-label">Low Stock</span>
+      <span class="stat-value" id="statLow">—</span>
+    </div>
+    <div class="stat-card danger">
+      <span class="stat-label">Out of Stock</span>
+      <span class="stat-value" id="statOut">—</span>
+    </div>
+  </div>
+
+  <nav class="nav-menu">
+    <a class="nav-item {% block nav_chat %}{% endblock %}" href="{{ url_for('page_chat') }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      <span>AI Assistant</span>
+    </a>
+    <a class="nav-item {% block nav_analytics %}{% endblock %}" href="{{ url_for('page_analytics') }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span>Analytics</span>
+    </a>
+    <a class="nav-item {% block nav_products %}{% endblock %}" href="{{ url_for('page_products') }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      <span>Products</span>
+    </a>
+    <a class="nav-item {% block nav_add %}{% endblock %}" href="{{ url_for('page_add_product') }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+      <span>Add Product</span>
+    </a>
+    <a class="nav-item {% block nav_transactions %}{% endblock %}" href="{{ url_for('page_transactions') }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <span>Transactions</span>
+    </a>
+    <a class="nav-item {% block nav_import %}{% endblock %}" href="{{ url_for('page_import_export') }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span>Import / Export</span>
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="user-tag" id="userTag">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span id="usernameDisplay">...</span>
+    </div>
+    <div class="ai-badge">
+      <div class="ai-dot"></div>
+      <span>Powered by Llama 3.1</span>
+    </div>
+    <button class="btn-logout" onclick="doLogout()">Sign Out</button>
+  </div>
+</aside>
+
+<!-- Main Content -->
+<main class="main" id="main">
+  <!-- Header -->
+  <header class="top-bar">
+    <div class="top-bar-left">
+      <button class="mobile-menu-btn" id="mobileMenu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+      </button>
+      <h1 class="page-title" id="pageTitle">{% block page_title %}ARIA{% endblock %}</h1>
+    </div>
+    <div class="top-bar-right">
+      <div class="search-bar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input type="text" placeholder="Search inventory..." id="globalSearch">
+      </div>
+      <div class="alert-bell" id="alertBell" onclick="window.location.href='{{ url_for('page_chat') }}'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>
+        <span class="alert-count" id="alertCount" style="display:none">0</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Page-specific content -->
+  <div class="panel active" id="panel-main">
+    {% block panel %}{% endblock %}
+  </div>
+
+</main>
+
+<!-- Stock Update Modal -->
+<div class="modal-overlay" id="stockModal">
+  <div class="modal glass-card">
+    <div class="modal-header">
+      <h3 id="stockModalTitle">Update Stock</h3>
+      <button class="modal-close" onclick="closeModal('stockModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="stockProductId">
+      <div class="form-group">
+        <label>Action</label>
+        <div class="btn-group">
+          <button class="btn-toggle active" data-action="add">+ Add Stock</button>
+          <button class="btn-toggle" data-action="remove">− Remove Stock</button>
+          <button class="btn-toggle" data-action="set">= Set Quantity</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Quantity</label>
+        <input type="number" id="stockQty" min="0" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>Note</label>
+        <input type="text" id="stockNote" placeholder="Reason for change...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal('stockModal')">Cancel</button>
+      <button class="btn-primary" onclick="submitStockUpdate()">Update Stock</button>
+    </div>
+  </div>
+</div>
+
+<!-- Image Modal -->
+<div class="modal-overlay" id="imageModal">
+  <div class="modal glass-card">
+    <div class="modal-header">
+      <h3>Upload Product Image</h3>
+      <button class="modal-close" onclick="closeModal('imageModal')">×</button>
+    </div>
+    <div class="modal-body" style="text-align:center">
+      <img id="imageModalPreview" src="" style="max-width:100%;max-height:300px;border-radius:12px;margin-bottom:16px">
+      <p style="color:var(--text2);font-size:0.88rem">This image will be saved with the product after you click Save Product.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Voice overlay (hidden, kept for compat) -->
+<div class="voice-overlay" id="voiceOverlay" style="display:none!important">
+  <div class="voice-dialog glass-card">
+    <div class="voice-transcript"><div class="voice-transcript-inner" id="voiceTranscriptInner"></div></div>
+    <div class="voice-avatar-wrap">
+      <div class="voice-avatar" id="voiceAvatar"><div class="voice-rings"><div class="vring vring-1"></div><div class="vring vring-2"></div><div class="vring vring-3"></div></div><div class="voice-avatar-core"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></div></div>
+      <div class="voice-state-label" id="voiceStateLabel"></div>
+    </div>
+    <div class="voice-waveform" id="voiceWaveform"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <div class="voice-controls"><button class="voice-stop-btn" id="voiceStopBtn" disabled></button></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

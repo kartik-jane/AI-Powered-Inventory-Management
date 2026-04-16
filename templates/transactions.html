@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Transactions{% endblock %}
+{% block page_title %}Transactions{% endblock %}
+{% block nav_transactions %}active{% endblock %}
+
+{% block panel %}
+<div class="panel-header">
+  <div class="filter-row">
+    <select class="filter-select" id="txTypeFilter">
+      <option value="">All Types</option>
+      <option value="add">Stock Added</option>
+      <option value="remove">Stock Removed</option>
+      <option value="adjust">Adjusted</option>
+    </select>
+    <input type="date" class="filter-input" id="txFromDate" style="max-width:160px">
+    <input type="date" class="filter-input" id="txToDate" style="max-width:160px">
+    <button class="btn-ghost" onclick="loadTransactions()">↻ Refresh</button>
+    <button class="btn-primary" onclick="exportTxCSV()">⬇ Export</button>
+  </div>
+</div>
+<div class="table-wrap">
+  <table class="glass-table">
+    <thead>
+      <tr><th>Date</th><th>Product</th><th>SKU</th><th>Type</th><th>Quantity</th><th>By</th><th>Note</th></tr>
+    </thead>
+    <tbody id="transactionTableBody">
+      <tr><td colspan="7" class="loading-cell">Loading transactions...</td></tr>
+    </tbody>
+  </table>
+</div>
+<div id="txPagination" class="pagination-row"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    loadTransactions();
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Analytics{% endblock %}
+{% block page_title %}Analytics{% endblock %}
+{% block nav_analytics %}active{% endblock %}
+
+{% block panel %}
+<div class="analytics-header">
+  <div class="analytics-period">
+    <label>Period:</label>
+    <select id="analyticsPeriod" onchange="loadAnalytics()">
+      <option value="7">Last 7 days</option>
+      <option value="30" selected>Last 30 days</option>
+      <option value="90">Last 90 days</option>
+    </select>
+  </div>
+  <button class="btn-primary" onclick="loadAnalytics()">↻ Refresh</button>
+</div>
+
+<!-- KPI Row -->
+<div class="kpi-row" id="kpiRow">
+  <div class="kpi-card">
+    <div class="kpi-icon" style="background:rgba(123,94,167,0.15)">📦</div>
+    <div class="kpi-body">
+      <span class="kpi-label">Total Value</span>
+      <span class="kpi-val" id="kpiValue">—</span>
+    </div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon" style="background:rgba(82,227,168,0.15)">💰</div>
+    <div class="kpi-body">
+      <span class="kpi-label">Est. Profit</span>
+      <span class="kpi-val" id="kpiProfit">—</span>
+    </div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon" style="background:rgba(78,205,196,0.15)">🔄</div>
+    <div class="kpi-body">
+      <span class="kpi-label">Turnover Rate</span>
+      <span class="kpi-val" id="kpiTurnover">—</span>
+    </div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon" style="background:rgba(255,107,107,0.15)">⚠️</div>
+    <div class="kpi-body">
+      <span class="kpi-label">Dead Stock Items</span>
+      <span class="kpi-val" id="kpiDead">—</span>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Row -->
+<div class="charts-row">
+  <div class="chart-card">
+    <h4>Category Distribution</h4>
+    <div class="chart-wrap"><canvas id="categoryChart"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <h4>Stock Status</h4>
+    <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
+  </div>
+</div>
+
+<!-- Intelligence Cards -->
+<div class="intel-row">
+  <div class="intel-card">
+    <div class="intel-title">🔮 Restock Predictions</div>
+    <div class="intel-body" id="predictionList"><div class="loading-cell">Loading…</div></div>
+  </div>
+  <div class="intel-card">
+    <div class="intel-title">⚡ Fast Movers (30d)</div>
+    <div class="intel-body" id="fastMoverList"><div class="loading-cell">Loading…</div></div>
+  </div>
+  <div class="intel-card">
+    <div class="intel-title">💀 Dead Stock</div>
+    <div class="intel-body" id="deadStockList"><div class="loading-cell">Loading…</div></div>
+  </div>
+  <div class="intel-card">
+    <div class="intel-title">🏭 Supplier Overview</div>
+    <div class="intel-body" id="supplierList"><div class="loading-cell">Loading…</div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    loadAnalytics();
+  });
+</script>
+{% endblock %}

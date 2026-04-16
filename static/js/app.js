@@ -11,16 +11,10 @@ const state = {
 document.addEventListener('DOMContentLoaded', () => {
   loadMe();
   loadStats();
-  loadProducts();
-  loadTransactions();
-  loadNotifications();
   setupNav();
-  setupChat();
   setupSearch();
   setupStockModal();
-  setupVoice();
-  setupImageUpload();
-  setupImportDrop();
+  // Page-specific inits are handled by each template's inline <script>
 });
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -41,9 +35,8 @@ async function doLogout() {
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
 function setupNav() {
-  document.querySelectorAll('.nav-item').forEach(btn => {
-    btn.addEventListener('click', () => switchPanel(btn.dataset.panel));
-  });
+  // Nav items are now <a> tags — browser handles navigation natively.
+  // Only wire sidebar toggle and mobile menu.
   document.getElementById('sidebarToggle')?.addEventListener('click', () => {
     document.getElementById('sidebar').classList.toggle('collapsed');
   });
@@ -52,27 +45,18 @@ function setupNav() {
   });
 }
 
+// switchPanel: kept for any internal calls; maps panel names → page URLs
 function switchPanel(name) {
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-  const panel = document.getElementById(`panel-${name}`);
-  if (panel) panel.classList.add('active');
-  const btn = document.querySelector(`[data-panel="${name}"]`);
-  if (btn) btn.classList.add('active');
-
-  const titles = {
-    chat: 'AI Assistant', analytics: 'Analytics', products: 'Products',
-    add: 'Add Product', transactions: 'Transactions', import: 'Import / Export',
-    notifications: 'Notifications'
+  const routes = {
+    chat: '/chat',
+    analytics: '/analytics',
+    products: '/products',
+    add: '/add-product',
+    transactions: '/transactions',
+    import: '/import-export',
+    notifications: '/chat',  // notifications shown on chat page (bell icon)
   };
-  document.getElementById('pageTitle').textContent = titles[name] || name;
-
-  if (name === 'products') loadProducts();
-  if (name === 'transactions') { state.txPage = 1; loadTransactions(); }
-  if (name === 'analytics') loadAnalytics();
-  if (name === 'notifications') loadNotifications();
-
-  document.getElementById('sidebar').classList.remove('open');
+  if (routes[name]) window.location.href = routes[name];
 }
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
@@ -323,10 +307,18 @@ function populateCategoryFilter(products) {
 }
 
 function editProduct(id) {
-  const p = state.products.find(x => x.id === id);
-  if (!p) return;
-  populateEditForm(p);
-  switchPanel('add');
+  // Navigate to Add Product page with the product id as a query param
+  window.location.href = `/add-product?edit=${id}`;
+}
+
+// loadProductForEdit: called on Add Product page when ?edit=ID is present
+async function loadProductForEdit(id) {
+  try {
+    const res = await fetch(`/api/products/${id}`);
+    if (!res.ok) return;
+    const p = await res.json();
+    populateEditForm(p);
+  } catch (e) { console.error(e); }
 }
 
 async function saveProduct() {
@@ -364,7 +356,7 @@ async function saveProduct() {
 
     showToast(editId ? `Updated: ${result.name}` : `Added: ${result.name}`, 'success');
     clearForm();
-    loadStats(); loadProducts();
+    loadStats();
   } catch (e) { showToast('Error saving product', 'error'); }
 }
 
@@ -557,7 +549,7 @@ async function importCSV(input) {
         ✅ Imported <strong>${data.added}</strong> products · Skipped <strong>${data.skipped}</strong> duplicates
         ${errorHtml}
       </div>`;
-    if (data.added > 0) { loadStats(); loadProducts(); }
+    if (data.added > 0) { loadStats(); }
   } catch (e) {
     resultEl.innerHTML = `<div style="color:var(--red)">Import failed: ${e.message}</div>`;
   }
@@ -602,8 +594,12 @@ function setupSearch() {
     if (!q) { renderProductTable(state.products); return; }
     const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
     const data = await res.json();
+    // If not on products page, navigate there to show results
+    if (!document.getElementById('productTableBody')) {
+      window.location.href = `/products?q=${encodeURIComponent(q)}`;
+      return;
+    }
     renderProductTable(data.products || data);
-    if (!document.getElementById('panel-products').classList.contains('active')) switchPanel('products');
   }, 300));
 
   document.getElementById('productSearch')?.addEventListener('input', debounce(doProductFilter, 300));
@@ -714,7 +710,7 @@ async function sendMessage(opts = {}) {
     voice.speakIfActive(data.message);
 
     if (data.actions_taken?.length) {
-      await Promise.all([loadStats(), loadProducts(), loadTransactions(), loadNotifications()]);
+      await Promise.all([loadStats(), loadNotifications()]);
       syncFormFromActions(data.actions_taken);
     }
   } catch (e) {
@@ -808,7 +804,7 @@ function buildProductCard(p, mode) {
         <div class="pic-row"><span class="pic-label">Price</span><span class="pic-val">${formatCurrency(p.unit_price)}${profitMargin}</span></div>
         ${p.supplier ? `<div class="pic-row"><span class="pic-label">Supplier</span><span class="pic-val">${esc(p.supplier)}</span></div>` : ''}
       </div>
-      <button class="pic-edit-btn" onclick="editProduct(${p.id});switchPanel('add')">✏️ Edit in Form</button>
+      <button class="pic-edit-btn" onclick="editProduct(${p.id})">✏️ Edit in Form</button>
     </div>`;
 }
 
@@ -899,7 +895,10 @@ function openVoiceDialog() {
   if (stopBtn) stopBtn.style.display = '';
   if (sendBtn) sendBtn.style.display = 'none';
   setVoiceDialogState('idle');
-  if (!document.getElementById('panel-chat').classList.contains('active')) switchPanel('chat');
+  // If not on chat page, navigate there
+  if (!document.getElementById('chatMessages')) {
+    window.location.href = '/chat';
+  }
 }
 
 function closeVoiceDialog() {
@@ -1047,7 +1046,7 @@ async function _onListenDone() {
     appendMessage('ai', reply, aiData.actions_taken);
     state.chatHistory.push({ role: 'assistant', content: reply });
     if (aiData.actions_taken?.length) {
-      await Promise.all([loadStats(), loadProducts(), loadTransactions(), loadNotifications()]);
+      await Promise.all([loadStats(), loadNotifications()]);
       syncFormFromActions(aiData.actions_taken);
     }
     await speakVoiceReply(reply);
