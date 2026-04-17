@@ -710,7 +710,7 @@ async function sendMessage(opts = {}) {
     voice.speakIfActive(data.message);
 
     if (data.actions_taken?.length) {
-      await Promise.all([loadStats(), loadNotifications()]);
+      await Promise.all([loadStats(), loadNotifications(), loadProducts()]);
       syncFormFromActions(data.actions_taken);
     }
   } catch (e) {
@@ -725,18 +725,16 @@ function syncFormFromActions(actions) {
   for (const a of actions) {
     if (a.status !== 'success') continue;
     if (a.action === 'create_product' && a.product) {
-      const fresh = state.products.find(x => x.id === a.product.id) || a.product;
+      const fresh = a.product;
       populateEditForm(fresh);
     } else if (a.action === 'update_product' && a.product) {
-      const fresh = state.products.find(x => x.id === a.product.id) || a.product;
+      const fresh = a.product;
       populateEditForm(fresh);
     } else if (a.action === 'delete_product') {
       clearForm();
     } else if (a.action === 'update_stock') {
-      const targetId = a.product_id;
-      if (targetId) {
-        const fresh = state.products.find(x => x.id === targetId);
-        if (fresh) populateEditForm(fresh);
+      if (a.product) {
+        populateEditForm(a.product);   // ✅ ALWAYS use backend response
       }
     }
   }
@@ -1046,7 +1044,7 @@ async function _onListenDone() {
     appendMessage('ai', reply, aiData.actions_taken);
     state.chatHistory.push({ role: 'assistant', content: reply });
     if (aiData.actions_taken?.length) {
-      await Promise.all([loadStats(), loadNotifications()]);
+      await Promise.all([loadStats(), loadNotifications(), loadProducts()]);
       syncFormFromActions(aiData.actions_taken);
     }
     await speakVoiceReply(reply);
