@@ -835,11 +835,36 @@ INTELLIGENCE RULES (voice):
 - Always relate numbers to action: not "stock is 8" but "only 8 left, should reorder soon."
 
 CRUD RULES:
-- name + SKU mandatory for create. Ask if missing.
-- Never delete without: "Just to confirm — delete [name]? Say yes to proceed."
-- Stock changes: do directly with JSON block, confirm in one sentence.
+- name + SKU mandatory for create_product. If either is missing, ask for it before proceeding.
+- Never delete without explicit confirmation: say "Just to confirm — delete [name]? Say yes to proceed." and wait.
+- Stock changes: execute directly with JSON block, confirm in one sentence.
+- For updates, only change fields the user explicitly mentioned.
+- Always confirm what action was taken in one plain spoken sentence after executing it.
 
-You can embed JSON action blocks — they are processed silently.
+AVAILABLE ACTIONS — embed these JSON blocks in your reply (they are executed silently, never read aloud):
+
+Add a new product:
+```json
+{"action": "create_product", "data": {"name": "Product Name", "sku": "SKU001", "category": "Category", "quantity": 0, "unit_price": 0.00, "cost_price": 0.00, "supplier": "Supplier Name", "supplier_lead_days": 7, "low_stock_threshold": 10, "description": ""}}
+```
+
+Update stock levels:
+```json
+{"action": "update_stock", "product_id": 1, "stock_action": "add", "quantity": 50, "note": "Restock"}
+```
+stock_action can be "add", "remove", or "set".
+
+Edit product details:
+```json
+{"action": "update_product", "product_id": 1, "data": {"name": "New Name", "unit_price": 15.99, "category": "Electronics", "supplier": "Supplier", "low_stock_threshold": 10}}
+```
+
+Delete a product (only after user confirms with "yes"):
+```json
+{"action": "delete_product", "product_id": 1}
+```
+
+Use the product list in the inventory data to find the correct product_id when the user mentions a product by name.
 """
 
 # ─── AI Chat Routes ────────────────────────────────────────────────────────────
@@ -918,13 +943,17 @@ def voice_chat():
     if not GROQ_API_KEY:
         return jsonify({'error': 'Server API key not configured.'}), 400
 
-    stats, product_list, analytics_ctx = get_inventory_context(include_analytics=False)
+    stats, product_list, analytics_ctx = get_inventory_context(include_analytics=True)
     inventory_context = f"""
 Current Inventory: {stats['total_products']} products, total value ${stats['total_value']:.2f}, profit ${stats['estimated_profit']:.2f}.
 Low stock: {len(stats['low_stock'])} items. Out of stock: {len(stats['out_of_stock'])} items.
 Expiring soon: {len(stats['expiring_soon'])} items.
-Products: {json.dumps(product_list)}
-Low stock: {json.dumps(stats['low_stock']) if stats['low_stock'] else 'none'}
+
+Products (use 'id' field for action blocks):
+{json.dumps(product_list)}
+
+Low stock items: {json.dumps(stats['low_stock']) if stats['low_stock'] else 'none'}
+{analytics_ctx}
 """
 
     try:
@@ -933,7 +962,7 @@ Low stock: {json.dumps(stats['low_stock']) if stats['low_stock'] else 'none'}
             model="llama-3.1-8b-instant",
             messages=[{"role": "system", "content": VOICE_SYSTEM_PROMPT + f"\n\nINVENTORY DATA:\n{inventory_context}"}] + messages,
             temperature=0.5,
-            max_tokens=350
+            max_tokens=600
         )
         ai_message = response.choices[0].message.content
 
