@@ -5,6 +5,11 @@
 
 {% block panel %}
 <div class="panel-header">
+  <div id="warehouseContextBanner" style="display:none;margin-bottom:12px;padding:10px 16px;background:rgba(123,94,167,0.12);border:1px solid rgba(123,94,167,0.3);border-radius:10px;display:flex;align-items:center;gap:10px;font-size:0.88rem;color:var(--text2)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:16px;height:16px;color:var(--accent2);flex-shrink:0"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    <span id="warehouseContextLabel">Showing products for warehouse</span>
+    <a href="/products" style="margin-left:auto;color:var(--text3);font-size:0.8rem;text-decoration:none" onclick="">✕ Show all</a>
+  </div>
   <div class="filter-row">
     <input type="text" class="filter-input" id="productSearch" placeholder="Search products...">
     <select class="filter-select" id="categoryFilter">
@@ -16,7 +21,7 @@
       <option value="low">Low Stock</option>
       <option value="out">Out of Stock</option>
     </select>
-    <a class="btn-primary" href="{{ url_for('page_add_product') }}">+ Add Product</a>
+    <a class="btn-primary" id="addProductBtn" href="{{ url_for('page_add_product') }}">+ Add Product</a>
   </div>
 </div>
 <div class="table-wrap">
@@ -44,9 +49,42 @@
 
 {% block extra_js %}
 <script>
+  let _activeWarehouseId = null;
+  let _activeWarehouseName = '';
+
   document.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(window.location.search);
+    const wid = params.get('warehouse_id');
+    if (wid) {
+      _activeWarehouseId = parseInt(wid);
+      // Fetch warehouse name for banner
+      fetch(`/api/warehouses/${wid}`).then(r => r.json()).then(w => {
+        _activeWarehouseName = w.name || 'Warehouse';
+        const banner = document.getElementById('warehouseContextBanner');
+        const label = document.getElementById('warehouseContextLabel');
+        if (banner && label) {
+          label.textContent = `Showing products in: ${w.name}`;
+          banner.style.display = 'flex';
+        }
+        // Update Add Product link to pre-select this warehouse
+        const addBtn = document.getElementById('addProductBtn');
+        if (addBtn) addBtn.href = `/add-product?warehouse_id=${wid}`;
+      }).catch(() => {});
+    }
     loadProducts();
     setupStockModal();
   });
+
+  async function loadProducts() {
+    try {
+      let url = '/api/products?per_page=200';
+      if (_activeWarehouseId) url += `&warehouse_id=${_activeWarehouseId}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      state.products = data.products || data;
+      renderProductTable(state.products);
+      populateCategoryFilter(state.products);
+    } catch (e) { console.error(e); }
+  }
 </script>
 {% endblock %}

@@ -251,7 +251,11 @@ function renderSuppliers(suppliers) {
 // ─── Products ─────────────────────────────────────────────────────────────────
 async function loadProducts() {
   try {
-    const res = await fetch('/api/products?per_page=200');
+    let url = '/api/products?per_page=200';
+    if (typeof _activeWarehouseId !== 'undefined' && _activeWarehouseId) {
+      url += `&warehouse_id=${_activeWarehouseId}`;
+    }
+    const res = await fetch(url);
     const data = await res.json();
     state.products = data.products || data;
     renderProductTable(state.products);
@@ -324,6 +328,7 @@ async function loadProductForEdit(id) {
 
 async function saveProduct() {
   const editId = document.getElementById('editProductId').value;
+  const warehouseEl = document.getElementById('fWarehouse');
   const data = {
     name: document.getElementById('fName').value.trim(),
     sku: document.getElementById('fSku').value.trim(),
@@ -336,6 +341,7 @@ async function saveProduct() {
     low_stock_threshold: parseInt(document.getElementById('fThreshold').value) || 10,
     expiry_date: document.getElementById('fExpiry').value || null,
     description: document.getElementById('fDescription').value.trim(),
+    warehouse_id: warehouseEl ? (parseInt(warehouseEl.value) || null) : null,
   };
 
   if (!data.name || !data.sku) { showToast('Name and SKU are required', 'error'); return; }
@@ -376,6 +382,8 @@ function clearForm() {
   ['fName','fSku','fCategory','fSupplier','fDescription'].forEach(id => document.getElementById(id).value = '');
   ['fQty','fPrice','fCostPrice','fLeadDays','fThreshold'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('fExpiry').value = '';
+  const whSel = document.getElementById('fWarehouse');
+  if (whSel) whSel.value = '';
   document.getElementById('formTitle').textContent = 'Add New Product';
   document.getElementById('saveProductBtn').textContent = 'Save Product';
   document.getElementById('productImagePreview').style.display = 'none';
@@ -396,6 +404,8 @@ function populateEditForm(p) {
   document.getElementById('fThreshold').value = p.low_stock_threshold ?? 10;
   document.getElementById('fExpiry').value = p.expiry_date ? p.expiry_date.split('T')[0] : '';
   document.getElementById('fDescription').value = p.description || '';
+  const whSel = document.getElementById('fWarehouse');
+  if (whSel) whSel.value = p.warehouse_id || '';
   document.getElementById('formTitle').textContent = `Edit: ${p.name}`;
   document.getElementById('saveProductBtn').textContent = 'Update Product';
   if (p.image_filename) {
@@ -593,7 +603,11 @@ function setupSearch() {
   globalSearch.addEventListener('input', debounce(async () => {
     const q = globalSearch.value.trim();
     if (!q) { renderProductTable(state.products); return; }
-    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    let url = `/api/search?q=${encodeURIComponent(q)}`;
+    if (typeof _activeWarehouseId !== 'undefined' && _activeWarehouseId) {
+      url += `&warehouse_id=${_activeWarehouseId}`;
+    }
+    const res = await fetch(url);
     const data = await res.json();
     // If not on products page, navigate there to show results
     if (!document.getElementById('productTableBody')) {
@@ -612,7 +626,10 @@ async function doProductFilter() {
   const q = document.getElementById('productSearch').value.trim();
   const cat = document.getElementById('categoryFilter').value;
   const status = document.getElementById('statusFilter').value;
-  const url = `/api/search?q=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&status=${encodeURIComponent(status)}`;
+  let url = `/api/search?q=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&status=${encodeURIComponent(status)}`;
+  if (typeof _activeWarehouseId !== 'undefined' && _activeWarehouseId) {
+    url += `&warehouse_id=${_activeWarehouseId}`;
+  }
   const res = await fetch(url);
   const data = await res.json();
   renderProductTable(data.products || data);

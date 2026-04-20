@@ -57,6 +57,12 @@
       <input type="number" id="fThreshold" placeholder="10" min="0">
     </div>
     <div class="form-group">
+      <label>Warehouse <span style="color:var(--text3);font-size:0.78rem">(optional)</span></label>
+      <select id="fWarehouse" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;padding:13px 16px;color:var(--text);font-size:0.92rem;font-family:'DM Sans',sans-serif;outline:none;appearance:none;cursor:pointer">
+        <option value="">— No warehouse —</option>
+      </select>
+    </div>
+    <div class="form-group">
       <label>Expiry Date <span style="color:var(--text3);font-size:0.78rem">(optional)</span></label>
       <input type="date" id="fExpiry">
     </div>
@@ -76,12 +82,30 @@
 <script>
   document.addEventListener('DOMContentLoaded', () => {
     setupImageUpload();
-    // Check if editing an existing product via URL param
+    loadWarehouseOptions();
     const params = new URLSearchParams(window.location.search);
     const editId = params.get('edit');
+    const whId = params.get('warehouse_id');
     if (editId) {
       loadProductForEdit(parseInt(editId));
     }
+    if (whId) {
+      document.getElementById('fWarehouse').value = whId;
+    }
   });
+
+  async function loadWarehouseOptions() {
+    try {
+      const res = await fetch('/api/warehouses');
+      const warehouses = await res.json();
+      const sel = document.getElementById('fWarehouse');
+      warehouses.forEach(w => {
+        const opt = document.createElement('option');
+        opt.value = w.id;
+        opt.textContent = w.name + (w.location ? ' — ' + w.location : '');
+        sel.appendChild(opt);
+      });
+    } catch(e) { console.error(e); }
+  }
 </script>
 {% endblock %}

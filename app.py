@@ -36,8 +36,9 @@ def cache_bust(*keys):
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(200), unique=True, nullable=True)
     password_hash = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(20), default='viewer')  # admin, manager, viewer
+    role = db.Column(db.String(20), default='admin')  # admin, viewer
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @staticmethod
@@ -48,19 +49,48 @@ class User(db.Model):
         return self.password_hash == hashlib.sha256(password.encode()).hexdigest()
 
 
+class Warehouse(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    location = db.Column(db.String(300), default='')
+    manager = db.Column(db.String(200), default='')
+    capacity = db.Column(db.Integer, default=0)
+    description = db.Column(db.Text, default='')
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'name': self.name,
+            'location': self.location,
+            'manager': self.manager,
+            'capacity': self.capacity,
+            'description': self.description,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+        }
+
+
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    warehouse_id = db.Column(db.Integer, db.ForeignKey('warehouse.id'), nullable=True)
     name = db.Column(db.String(200), nullable=False)
-    sku = db.Column(db.String(100), unique=True, nullable=False)
+    sku = db.Column(db.String(100), nullable=False)
     category = db.Column(db.String(100), default='General')
     quantity = db.Column(db.Integer, default=0)
     unit_price = db.Column(db.Float, default=0.0)
-    cost_price = db.Column(db.Float, default=0.0)   # NEW: for profit calc
+    cost_price = db.Column(db.Float, default=0.0)
     supplier = db.Column(db.String(200), default='')
-    supplier_lead_days = db.Column(db.Integer, default=7)  # NEW: supplier lead time
+    supplier_lead_days = db.Column(db.Integer, default=7)
     low_stock_threshold = db.Column(db.Integer, default=10)
-    expiry_date = db.Column(db.DateTime, nullable=True)   # NEW: expiry tracking
-    image_filename = db.Column(db.String(300), default='')  # NEW: image
+    expiry_date = db.Column(db.DateTime, nullable=True)
+    image_filename = db.Column(db.String(300), default='')
     description = db.Column(db.Text, default='')
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -86,6 +116,8 @@ class Product(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'user_id': self.user_id,
+            'warehouse_id': self.warehouse_id,
             'name': self.name,
             'sku': self.sku,
             'category': self.category,
@@ -109,17 +141,19 @@ class Product(db.Model):
 
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     transaction_type = db.Column(db.String(50), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
     note = db.Column(db.Text, default='')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    created_by = db.Column(db.String(80), default='system')  # NEW: audit trail
+    created_by = db.Column(db.String(80), default='system')
     product = db.relationship('Product', backref='transactions')
 
     def to_dict(self):
         return {
             'id': self.id,
+            'user_id': self.user_id,
             'product_id': self.product_id,
             'product_name': self.product.name if self.product else 'Unknown',
             'product_sku': self.product.sku if self.product else '',
@@ -133,7 +167,8 @@ class Transaction(db.Model):
 
 class Notification(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    type = db.Column(db.String(50))  # 'low_stock', 'out_stock', 'expiry', 'anomaly', 'reorder'
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    type = db.Column(db.String(50))
     message = db.Column(db.Text)
     product_id = db.Column(db.Integer, nullable=True)
     is_read = db.Column(db.Boolean, default=False)
@@ -144,32 +179,6 @@ class Notification(db.Model):
             'id': self.id, 'type': self.type, 'message': self.message,
             'product_id': self.product_id, 'is_read': self.is_read,
             'created_at': self.created_at.isoformat()
-        }
-
-
-class Warehouse(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(200), nullable=False)
-    location = db.Column(db.String(300), default='')
-    manager = db.Column(db.String(200), default='')
-    capacity = db.Column(db.Integer, default=0)
-    description = db.Column(db.Text, default='')
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    def to_dict(self):
-        product_count = Product.query.filter_by(is_active=True).count()
-        return {
-            'id': self.id,
-            'name': self.name,
-            'location': self.location,
-            'manager': self.manager,
-            'capacity': self.capacity,
-            'description': self.description,
-            'is_active': self.is_active,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
         }
 
 
@@ -190,6 +199,9 @@ def sanitize(val):
         return bleach.clean(val.strip(), tags=[], strip=True)[:500]
     return val
 
+def current_user_id():
+    return session.get('user_id')
+
 # ─── Auth Routes ───────────────────────────────────────────────────────────────
 
 @app.route('/login', methods=['GET'])
@@ -197,6 +209,46 @@ def login_page():
     if session.get('user_id'):
         return redirect(url_for('index'))
     return render_template('login.html')
+
+@app.route('/signup', methods=['GET'])
+def signup_page():
+    if session.get('user_id'):
+        return redirect(url_for('index'))
+    return render_template('signup.html')
+
+@app.route('/api/auth/signup', methods=['POST'])
+def api_signup():
+    d = request.json or {}
+    username = sanitize(d.get('username', ''))
+    email = sanitize(d.get('email', ''))
+    password = d.get('password', '')
+    confirm = d.get('confirm_password', '')
+
+    if not username or not password:
+        return jsonify({'error': 'Username and password are required'}), 400
+    if len(username) < 3:
+        return jsonify({'error': 'Username must be at least 3 characters'}), 400
+    if len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    if password != confirm:
+        return jsonify({'error': 'Passwords do not match'}), 400
+    if User.query.filter_by(username=username).first():
+        return jsonify({'error': 'Username already taken'}), 400
+    if email and User.query.filter_by(email=email).first():
+        return jsonify({'error': 'Email already registered'}), 400
+
+    user = User(
+        username=username,
+        email=email if email else None,
+        password_hash=User.hash_pw(password),
+        role='admin',
+    )
+    db.session.add(user)
+    db.session.commit()
+    session['user_id'] = user.id
+    session['username'] = user.username
+    session['role'] = user.role
+    return jsonify({'message': 'Account created', 'username': user.username, 'role': user.role}), 201
 
 @app.route('/api/auth/login', methods=['POST'])
 def api_login():
@@ -223,7 +275,7 @@ def api_logout():
 def api_me():
     return jsonify({'username': session.get('username'), 'role': session.get('role')})
 
-# ─── Main Route ────────────────────────────────────────────────────────────────
+# ─── Main Routes ────────────────────────────────────────────────────────────────
 @app.route('/')
 def index():
     if session.get('user_id'):
@@ -235,32 +287,32 @@ def homepage():
     if session.get('user_id'):
         return redirect(url_for('page_chat'))
     return render_template('homepage.html')
- 
+
 @app.route('/chat')
 @login_required
 def page_chat():
     return render_template('chat.html')
- 
+
 @app.route('/analytics')
 @login_required
 def page_analytics():
     return render_template('analytics.html')
- 
+
 @app.route('/products')
 @login_required
 def page_products():
     return render_template('products.html')
- 
+
 @app.route('/add-product')
 @login_required
 def page_add_product():
     return render_template('add_product.html')
- 
+
 @app.route('/transactions')
 @login_required
 def page_transactions():
     return render_template('transactions.html')
- 
+
 @app.route('/import-export')
 @login_required
 def page_import_export():
@@ -276,16 +328,19 @@ def page_warehouses():
 @app.route('/api/warehouses', methods=['GET'])
 @login_required
 def get_warehouses():
-    warehouses = Warehouse.query.filter_by(is_active=True).all()
+    uid = current_user_id()
+    warehouses = Warehouse.query.filter_by(user_id=uid, is_active=True).all()
     return jsonify([w.to_dict() for w in warehouses])
 
 @app.route('/api/warehouses', methods=['POST'])
 @login_required
 def create_warehouse():
+    uid = current_user_id()
     data = request.json or {}
     if not data.get('name'):
         return jsonify({'error': 'Warehouse name is required'}), 400
     w = Warehouse(
+        user_id=uid,
         name=sanitize(data['name']),
         location=sanitize(data.get('location', '')),
         manager=sanitize(data.get('manager', '')),
@@ -299,13 +354,15 @@ def create_warehouse():
 @app.route('/api/warehouses/<int:wid>', methods=['GET'])
 @login_required
 def get_warehouse(wid):
-    w = Warehouse.query.get_or_404(wid)
+    uid = current_user_id()
+    w = Warehouse.query.filter_by(id=wid, user_id=uid).first_or_404()
     return jsonify(w.to_dict())
 
 @app.route('/api/warehouses/<int:wid>', methods=['PUT'])
 @login_required
 def update_warehouse(wid):
-    w = Warehouse.query.get_or_404(wid)
+    uid = current_user_id()
+    w = Warehouse.query.filter_by(id=wid, user_id=uid).first_or_404()
     data = request.json or {}
     for field in ['name', 'location', 'manager', 'description']:
         if field in data:
@@ -319,7 +376,8 @@ def update_warehouse(wid):
 @app.route('/api/warehouses/<int:wid>', methods=['DELETE'])
 @login_required
 def delete_warehouse(wid):
-    w = Warehouse.query.get_or_404(wid)
+    uid = current_user_id()
+    w = Warehouse.query.filter_by(id=wid, user_id=uid).first_or_404()
     w.is_active = False
     db.session.commit()
     return jsonify({'message': f"Warehouse '{w.name}' deleted successfully"})
@@ -329,11 +387,15 @@ def delete_warehouse(wid):
 @app.route('/api/products', methods=['GET'])
 @login_required
 def get_products():
+    uid = current_user_id()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 50, type=int)
     status_filter = request.args.get('status', '')
+    warehouse_id = request.args.get('warehouse_id', None, type=int)
 
-    query = Product.query.filter_by(is_active=True)
+    query = Product.query.filter_by(is_active=True, user_id=uid)
+    if warehouse_id:
+        query = query.filter_by(warehouse_id=warehouse_id)
     if status_filter == 'low':
         query = query.filter(Product.quantity > 0, Product.quantity <= Product.low_stock_threshold)
     elif status_filter == 'out':
@@ -352,12 +414,22 @@ def get_products():
 @app.route('/api/products', methods=['POST'])
 @login_required
 def create_product():
+    uid = current_user_id()
     data = request.json
     if not data.get('name') or not data.get('sku'):
         return jsonify({'error': 'Name and SKU are required'}), 400
     sku = sanitize(data['sku'])
-    if Product.query.filter_by(sku=sku).first():
-        return jsonify({'error': f"SKU '{sku}' already exists"}), 400
+    warehouse_id = data.get('warehouse_id', None)
+
+    # SKU unique per user
+    if Product.query.filter_by(sku=sku, user_id=uid, is_active=True).first():
+        return jsonify({'error': f"SKU '{sku}' already exists in your inventory"}), 400
+
+    # Validate warehouse belongs to user
+    if warehouse_id:
+        wh = Warehouse.query.filter_by(id=warehouse_id, user_id=uid, is_active=True).first()
+        if not wh:
+            warehouse_id = None
 
     expiry = None
     if data.get('expiry_date'):
@@ -367,6 +439,8 @@ def create_product():
             pass
 
     product = Product(
+        user_id=uid,
+        warehouse_id=warehouse_id,
         name=sanitize(data['name']),
         sku=sku,
         category=sanitize(data.get('category', 'General')),
@@ -381,20 +455,22 @@ def create_product():
     )
     db.session.add(product)
     db.session.commit()
-    cache_bust('stats')
+    cache_bust(f'stats_{uid}')
     _check_and_notify(product)
     return jsonify(product.to_dict()), 201
 
 @app.route('/api/products/<int:product_id>', methods=['GET'])
 @login_required
 def get_product(product_id):
-    product = Product.query.get_or_404(product_id)
+    uid = current_user_id()
+    product = Product.query.filter_by(id=product_id, user_id=uid).first_or_404()
     return jsonify(product.to_dict())
 
 @app.route('/api/products/<int:product_id>', methods=['PUT'])
 @login_required
 def update_product(product_id):
-    product = Product.query.get_or_404(product_id)
+    uid = current_user_id()
+    product = Product.query.filter_by(id=product_id, user_id=uid).first_or_404()
     data = request.json
     for field in ['name', 'category', 'supplier', 'description']:
         if field in data:
@@ -407,9 +483,16 @@ def update_product(product_id):
             setattr(product, field, max(0, int(data[field])))
     if 'sku' in data and data['sku'] != product.sku:
         sku = sanitize(data['sku'])
-        if Product.query.filter_by(sku=sku).first():
+        if Product.query.filter_by(sku=sku, user_id=uid, is_active=True).first():
             return jsonify({'error': f"SKU '{sku}' already exists"}), 400
         product.sku = sku
+    if 'warehouse_id' in data:
+        wid = data['warehouse_id']
+        if wid:
+            wh = Warehouse.query.filter_by(id=wid, user_id=uid, is_active=True).first()
+            product.warehouse_id = wh.id if wh else None
+        else:
+            product.warehouse_id = None
     if 'expiry_date' in data:
         try:
             product.expiry_date = datetime.fromisoformat(data['expiry_date']) if data['expiry_date'] else None
@@ -417,22 +500,24 @@ def update_product(product_id):
             pass
     product.updated_at = datetime.utcnow()
     db.session.commit()
-    cache_bust('stats')
+    cache_bust(f'stats_{uid}')
     return jsonify(product.to_dict())
 
 @app.route('/api/products/<int:product_id>', methods=['DELETE'])
 @login_required
 def delete_product(product_id):
-    product = Product.query.get_or_404(product_id)
-    product.is_active = False  # soft delete
+    uid = current_user_id()
+    product = Product.query.filter_by(id=product_id, user_id=uid).first_or_404()
+    product.is_active = False
     db.session.commit()
-    cache_bust('stats')
+    cache_bust(f'stats_{uid}')
     return jsonify({'message': f"Product '{product.name}' deleted successfully"})
 
 @app.route('/api/products/<int:product_id>/stock', methods=['POST'])
 @login_required
 def update_stock(product_id):
-    product = Product.query.get_or_404(product_id)
+    uid = current_user_id()
+    product = Product.query.filter_by(id=product_id, user_id=uid).first_or_404()
     data = request.json
     action = data.get('action', 'add')
     qty = int(data.get('quantity', 0))
@@ -455,13 +540,14 @@ def update_stock(product_id):
 
     product.updated_at = datetime.utcnow()
     tx = Transaction(
+        user_id=uid,
         product_id=product.id, transaction_type=tx_type,
         quantity=qty, note=note,
         created_by=session.get('username', 'system')
     )
     db.session.add(tx)
     db.session.commit()
-    cache_bust('stats')
+    cache_bust(f'stats_{uid}')
     _check_and_notify(product)
     _detect_anomaly(product, tx_type, qty, old_qty)
     return jsonify({'product': product.to_dict(), 'old_quantity': old_qty, 'new_quantity': product.quantity})
@@ -471,7 +557,8 @@ def update_stock(product_id):
 @app.route('/api/products/<int:product_id>/image', methods=['POST'])
 @login_required
 def upload_product_image(product_id):
-    product = Product.query.get_or_404(product_id)
+    uid = current_user_id()
+    product = Product.query.filter_by(id=product_id, user_id=uid).first_or_404()
     if 'image' not in request.files:
         return jsonify({'error': 'No image file'}), 400
     f = request.files['image']
@@ -480,7 +567,7 @@ def upload_product_image(product_id):
     ext = f.filename.rsplit('.', 1)[-1].lower()
     if ext not in {'png', 'jpg', 'jpeg', 'webp', 'gif'}:
         return jsonify({'error': 'Invalid image type'}), 400
-    filename = f'product_{product_id}_{int(datetime.utcnow().timestamp())}.{ext}'
+    filename = f'product_{uid}_{product_id}_{int(datetime.utcnow().timestamp())}.{ext}'
     upload_dir = os.path.join(app.root_path, 'static', 'uploads')
     os.makedirs(upload_dir, exist_ok=True)
     f.save(os.path.join(upload_dir, filename))
@@ -493,7 +580,8 @@ def upload_product_image(product_id):
 @app.route('/api/products/export/csv', methods=['GET'])
 @login_required
 def export_csv():
-    products = Product.query.filter_by(is_active=True).all()
+    uid = current_user_id()
+    products = Product.query.filter_by(is_active=True, user_id=uid).all()
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(['Name', 'SKU', 'Category', 'Quantity', 'Unit Price', 'Cost Price',
@@ -509,6 +597,7 @@ def export_csv():
 @app.route('/api/products/import/csv', methods=['POST'])
 @login_required
 def import_csv():
+    uid = current_user_id()
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
     f = request.files['file']
@@ -522,7 +611,7 @@ def import_csv():
             if not sku or not name:
                 errors.append(f'Row missing Name or SKU: {row}')
                 continue
-            if Product.query.filter_by(sku=sku).first():
+            if Product.query.filter_by(sku=sku, user_id=uid, is_active=True).first():
                 skipped += 1
                 continue
             expiry = None
@@ -532,6 +621,7 @@ def import_csv():
                 except:
                     pass
             p = Product(
+                user_id=uid,
                 name=name, sku=sku,
                 category=sanitize(row.get('Category', 'General')),
                 quantity=int(row.get('Quantity', 0)),
@@ -548,7 +638,7 @@ def import_csv():
         except Exception as e:
             errors.append(str(e))
     db.session.commit()
-    cache_bust('stats')
+    cache_bust(f'stats_{uid}')
     return jsonify({'added': added, 'skipped': skipped, 'errors': errors})
 
 # ─── Transactions ──────────────────────────────────────────────────────────────
@@ -556,6 +646,7 @@ def import_csv():
 @app.route('/api/transactions', methods=['GET'])
 @login_required
 def get_transactions():
+    uid = current_user_id()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 50, type=int)
     tx_type = request.args.get('type', '')
@@ -563,7 +654,7 @@ def get_transactions():
     date_from = request.args.get('from', '')
     date_to = request.args.get('to', '')
 
-    query = Transaction.query
+    query = Transaction.query.filter_by(user_id=uid)
     if tx_type:
         query = query.filter_by(transaction_type=tx_type)
     if product_id:
@@ -591,11 +682,13 @@ def get_transactions():
 @app.route('/api/stats', methods=['GET'])
 @login_required
 def get_stats():
-    cached = cache_get('stats')
+    uid = current_user_id()
+    cache_key = f'stats_{uid}'
+    cached = cache_get(cache_key)
     if cached:
         return jsonify(cached)
 
-    products = Product.query.filter_by(is_active=True).all()
+    products = Product.query.filter_by(is_active=True, user_id=uid).all()
     total_products = len(products)
     total_value = sum(p.quantity * p.unit_price for p in products)
     total_cost = sum(p.quantity * p.cost_price for p in products)
@@ -624,18 +717,17 @@ def get_stats():
         'categories': categories,
         'expiring_soon': expiring_soon,
     }
-    cache_set('stats', result, ttl_sec=30)
+    cache_set(cache_key, result, ttl_sec=30)
     return jsonify(result)
 
 @app.route('/api/analytics', methods=['GET'])
 @login_required
 def get_analytics():
-    """Advanced analytics: trends, turnover, fast/slow movers, predictions."""
+    uid = current_user_id()
     days = request.args.get('days', 30, type=int)
     since = datetime.utcnow() - timedelta(days=days)
 
-    # Daily transaction volume
-    txs = Transaction.query.filter(Transaction.created_at >= since).all()
+    txs = Transaction.query.filter(Transaction.created_at >= since, Transaction.user_id == uid).all()
     daily = {}
     product_movement = {}
     for tx in txs:
@@ -646,8 +738,7 @@ def get_analytics():
             product_movement[pid] = {'add': 0, 'remove': 0}
         product_movement[pid][tx.transaction_type if tx.transaction_type in ('add', 'remove') else 'add'] += tx.quantity
 
-    # Fast movers (most removed = sold/consumed)
-    products = Product.query.filter_by(is_active=True).all()
+    products = Product.query.filter_by(is_active=True, user_id=uid).all()
     product_map = {p.id: p for p in products}
 
     movers = []
@@ -664,18 +755,15 @@ def get_analytics():
     fast_movers = movers[:5]
     slow_movers = sorted(movers, key=lambda x: x['units_out'])[:5]
 
-    # Dead stock: products with zero transactions in the period
     active_ids = set(product_movement.keys())
     dead_stock = [{'id': p.id, 'name': p.name, 'sku': p.sku, 'quantity': p.quantity,
                    'value': round(p.quantity * p.unit_price, 2)}
                   for p in products if p.id not in active_ids and p.quantity > 0]
 
-    # Inventory turnover rate = units_sold / avg_inventory
     total_removed = sum(m['remove'] for m in product_movement.values())
     avg_inventory = sum(p.quantity for p in products) / max(1, len(products))
     turnover_rate = round(total_removed / max(1, avg_inventory), 2)
 
-    # Category breakdown
     cat_stats = {}
     for p in products:
         c = p.category
@@ -685,7 +773,6 @@ def get_analytics():
         cat_stats[c]['total_qty'] += p.quantity
         cat_stats[c]['total_value'] = round(cat_stats[c]['total_value'] + p.quantity * p.unit_price, 2)
 
-    # Stock prediction: for each fast mover, estimate days until stockout
     predictions = []
     for m in fast_movers:
         if m['units_out'] > 0 and m['current_qty'] > 0:
@@ -718,8 +805,8 @@ def get_analytics():
 @app.route('/api/analytics/supplier', methods=['GET'])
 @login_required
 def supplier_analytics():
-    """Supplier performance: how often they supply, average lead satisfaction."""
-    products = Product.query.filter_by(is_active=True).all()
+    uid = current_user_id()
+    products = Product.query.filter_by(is_active=True, user_id=uid).all()
     suppliers = {}
     for p in products:
         s = p.supplier or 'Unknown'
@@ -736,13 +823,17 @@ def supplier_analytics():
 @app.route('/api/search', methods=['GET'])
 @login_required
 def search_products():
+    uid = current_user_id()
     q = request.args.get('q', '')
     category = request.args.get('category', '')
     status = request.args.get('status', '')
+    warehouse_id = request.args.get('warehouse_id', None, type=int)
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 50, type=int)
 
-    query = Product.query.filter_by(is_active=True)
+    query = Product.query.filter_by(is_active=True, user_id=uid)
+    if warehouse_id:
+        query = query.filter_by(warehouse_id=warehouse_id)
     if q:
         query = query.filter(db.or_(
             Product.name.ilike(f'%{q}%'),
@@ -765,13 +856,15 @@ def search_products():
 @app.route('/api/notifications', methods=['GET'])
 @login_required
 def get_notifications():
-    notifs = Notification.query.filter_by(is_read=False).order_by(Notification.created_at.desc()).limit(20).all()
+    uid = current_user_id()
+    notifs = Notification.query.filter_by(is_read=False, user_id=uid).order_by(Notification.created_at.desc()).limit(20).all()
     return jsonify([n.to_dict() for n in notifs])
 
 @app.route('/api/notifications/<int:nid>/read', methods=['POST'])
 @login_required
 def mark_notification_read(nid):
-    n = Notification.query.get_or_404(nid)
+    uid = current_user_id()
+    n = Notification.query.filter_by(id=nid, user_id=uid).first_or_404()
     n.is_read = True
     db.session.commit()
     return jsonify({'ok': True})
@@ -779,32 +872,31 @@ def mark_notification_read(nid):
 @app.route('/api/notifications/read-all', methods=['POST'])
 @login_required
 def mark_all_read():
-    Notification.query.update({'is_read': True})
+    uid = current_user_id()
+    Notification.query.filter_by(user_id=uid).update({'is_read': True})
     db.session.commit()
     return jsonify({'ok': True})
 
 def _check_and_notify(product):
-    """Create in-app notifications for stock events."""
     if product.quantity == 0:
-        _push_notif('out_stock', f'⚠️ {product.name} is OUT OF STOCK', product.id)
+        _push_notif(product.user_id, 'out_stock', f'⚠️ {product.name} is OUT OF STOCK', product.id)
     elif product.quantity <= product.low_stock_threshold:
-        _push_notif('low_stock', f'📉 {product.name} is low: {product.quantity} units remaining', product.id)
+        _push_notif(product.user_id, 'low_stock', f'📉 {product.name} is low: {product.quantity} units remaining', product.id)
     if product.expiry_date:
         days = (product.expiry_date - datetime.utcnow()).days
         if days <= 30:
-            _push_notif('expiry', f'🗓 {product.name} expires in {days} days', product.id)
+            _push_notif(product.user_id, 'expiry', f'🗓 {product.name} expires in {days} days', product.id)
 
-def _push_notif(type, message, product_id=None):
-    n = Notification(type=type, message=message, product_id=product_id)
+def _push_notif(user_id, type, message, product_id=None):
+    n = Notification(user_id=user_id, type=type, message=message, product_id=product_id)
     db.session.add(n)
     db.session.commit()
 
 def _detect_anomaly(product, tx_type, qty, old_qty):
-    """Detect unusual stock drops (>50% in one transaction)."""
     if tx_type == 'remove' and old_qty > 0:
         drop_pct = (qty / old_qty) * 100
         if drop_pct >= 50:
-            _push_notif('anomaly',
+            _push_notif(product.user_id, 'anomaly',
                 f'🚨 Anomaly: {product.name} stock dropped {drop_pct:.0f}% ({old_qty}→{product.quantity}) in one transaction',
                 product.id)
 
@@ -812,8 +904,8 @@ def _detect_anomaly(product, tx_type, qty, old_qty):
 
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
 
-def get_inventory_context(include_analytics=True):
-    products = Product.query.filter_by(is_active=True).all()
+def get_inventory_context(uid, include_analytics=True):
+    products = Product.query.filter_by(is_active=True, user_id=uid).all()
     stats = {
         'total_products': len(products),
         'total_value': round(sum(p.quantity * p.unit_price for p in products), 2),
@@ -828,9 +920,8 @@ def get_inventory_context(include_analytics=True):
 
     analytics_ctx = ''
     if include_analytics:
-        # Quick usage data for the last 30 days
         since = datetime.utcnow() - timedelta(days=30)
-        txs = Transaction.query.filter(Transaction.created_at >= since).all()
+        txs = Transaction.query.filter(Transaction.created_at >= since, Transaction.user_id == uid).all()
         usage = {}
         for tx in txs:
             if tx.transaction_type == 'remove':
@@ -840,7 +931,6 @@ def get_inventory_context(include_analytics=True):
         analytics_ctx = '\n## 30-Day Usage (top consumed):\n' + \
             '\n'.join([f'- {pid_map.get(pid,"?")} : {qty} units out' for pid, qty in top_used])
 
-        # Stock predictions
         predictions = []
         for pid, qty_out in usage.items():
             p_obj = next((p for p in products if p.id == pid), None)
@@ -963,13 +1053,14 @@ Use the product list in the inventory data to find the correct product_id when t
 @app.route('/api/chat', methods=['POST'])
 @login_required
 def chat():
+    uid = current_user_id()
     data = request.json
-    messages = data.get('messages', [])[-10:]  # Keep last 10 for context window
+    messages = data.get('messages', [])[-10:]
 
     if not GROQ_API_KEY:
         return jsonify({'error': 'Server API key not configured. Contact admin.'}), 400
 
-    stats, product_list, analytics_ctx = get_inventory_context(include_analytics=True)
+    stats, product_list, analytics_ctx = get_inventory_context(uid, include_analytics=True)
     inventory_context = f"""
 ## Current Inventory Status:
 - Total Products: {stats['total_products']}
@@ -1007,7 +1098,7 @@ def chat():
         for match in re.finditer(r'```json\s*(\{[^`]+\})\s*```', ai_message, re.DOTALL):
             try:
                 action_data = json.loads(match.group(1))
-                result = execute_ai_action(action_data)
+                result = execute_ai_action(action_data, uid)
                 actions_taken.append(result)
             except Exception as e:
                 actions_taken.append({'error': str(e)})
@@ -1028,13 +1119,14 @@ def chat():
 @app.route('/api/voice/chat', methods=['POST'])
 @login_required
 def voice_chat():
+    uid = current_user_id()
     data = request.json
     messages = data.get('messages', [])[-6:]
 
     if not GROQ_API_KEY:
         return jsonify({'error': 'Server API key not configured.'}), 400
 
-    stats, product_list, analytics_ctx = get_inventory_context(include_analytics=True)
+    stats, product_list, analytics_ctx = get_inventory_context(uid, include_analytics=True)
     inventory_context = f"""
 Current Inventory: {stats['total_products']} products, total value ${stats['total_value']:.2f}, profit ${stats['estimated_profit']:.2f}.
 Low stock: {len(stats['low_stock'])} items. Out of stock: {len(stats['out_of_stock'])} items.
@@ -1061,7 +1153,7 @@ Low stock items: {json.dumps(stats['low_stock']) if stats['low_stock'] else 'non
         for match in re.finditer(r'```json\s*(\{[^`]+\})\s*```', ai_message, re.DOTALL):
             try:
                 action_data = json.loads(match.group(1))
-                result = execute_ai_action(action_data)
+                result = execute_ai_action(action_data, uid)
                 actions_taken.append(result)
             except Exception as e:
                 actions_taken.append({'error': str(e)})
@@ -1072,16 +1164,19 @@ Low stock items: {json.dumps(stats['low_stock']) if stats['low_stock'] else 'non
         return jsonify({'error': str(e)}), 500
 
 
-def execute_ai_action(action_data):
+def execute_ai_action(action_data, uid):
     action = action_data.get('action')
     try:
         if action == 'create_product':
-            d = action_data['data']
-            sku = sanitize(d.get('sku', ''))
-            if Product.query.filter_by(sku=sku).first():
-                return {'action': action, 'status': 'error', 'message': f"SKU {sku} already exists"}
+            d = action_data.get('data', {})
+            if not d.get('name') or not d.get('sku'):
+                return {'action': action, 'status': 'error', 'message': 'Name and SKU required'}
+            sku = sanitize(d['sku'])
+            if Product.query.filter_by(sku=sku, user_id=uid, is_active=True).first():
+                return {'action': action, 'status': 'error', 'message': f"SKU '{sku}' already exists"}
             p = Product(
-                name=sanitize(d.get('name', '')),
+                user_id=uid,
+                name=sanitize(d['name']),
                 sku=sku,
                 category=sanitize(d.get('category', 'General')),
                 quantity=max(0, int(d.get('quantity', 0))),
@@ -1094,12 +1189,12 @@ def execute_ai_action(action_data):
             )
             db.session.add(p)
             db.session.commit()
-            cache_bust('stats')
+            cache_bust(f'stats_{uid}')
             _check_and_notify(p)
             return {'action': action, 'status': 'success', 'product': p.to_dict()}
 
         elif action == 'update_stock':
-            p = Product.query.get(action_data['product_id'])
+            p = Product.query.filter_by(id=action_data['product_id'], user_id=uid).first()
             if not p:
                 return {'action': action, 'status': 'error', 'message': 'Product not found'}
             stock_action = action_data.get('stock_action', 'add')
@@ -1115,27 +1210,27 @@ def execute_ai_action(action_data):
             elif stock_action == 'set':
                 p.quantity = max(0, qty)
             p.updated_at = datetime.utcnow()
-            tx = Transaction(product_id=p.id, transaction_type=stock_action, quantity=qty, note=note,
+            tx = Transaction(user_id=uid, product_id=p.id, transaction_type=stock_action, quantity=qty, note=note,
                              created_by=session.get('username', 'ARIA'))
             db.session.add(tx)
             db.session.commit()
-            cache_bust('stats')
+            cache_bust(f'stats_{uid}')
             _check_and_notify(p)
             _detect_anomaly(p, stock_action, qty, old_qty)
             return {'action': action, 'status': 'success', 'product_id': p.id, 'old_quantity': old_qty, 'new_quantity': p.quantity}
 
         elif action == 'delete_product':
-            p = Product.query.get(action_data['product_id'])
+            p = Product.query.filter_by(id=action_data['product_id'], user_id=uid).first()
             if not p:
                 return {'action': action, 'status': 'error', 'message': 'Product not found'}
             name = p.name
             p.is_active = False
             db.session.commit()
-            cache_bust('stats')
+            cache_bust(f'stats_{uid}')
             return {'action': action, 'status': 'success', 'message': f"Deleted {name}"}
 
         elif action == 'update_product':
-            p = Product.query.get(action_data['product_id'])
+            p = Product.query.filter_by(id=action_data['product_id'], user_id=uid).first()
             if not p:
                 return {'action': action, 'status': 'error', 'message': 'Product not found'}
             d = action_data.get('data', {})
@@ -1150,7 +1245,7 @@ def execute_ai_action(action_data):
                     setattr(p, k, max(0, int(d[k])))
             p.updated_at = datetime.utcnow()
             db.session.commit()
-            cache_bust('stats')
+            cache_bust(f'stats_{uid}')
             return {'action': action, 'status': 'success', 'product': p.to_dict()}
 
         return {'action': action, 'status': 'error', 'message': 'Unknown action'}
@@ -1158,7 +1253,7 @@ def execute_ai_action(action_data):
         db.session.rollback()
         return {'action': action, 'status': 'error', 'message': str(e)}
 
-# ─── Voice Routes (unchanged from original) ────────────────────────────────────
+# ─── Voice Routes ────────────────────────────────────────────────────────────────
 
 def _clean_for_tts(text):
     t = re.sub(r'```[\s\S]*?```', '', text)
@@ -1217,22 +1312,37 @@ def voice_speak():
 
 def seed_sample_data():
     if User.query.count() == 0:
-        admin = User(username='admin', password_hash=User.hash_pw('admin123'), role='admin')
-        viewer = User(username='viewer', password_hash=User.hash_pw('viewer123'), role='viewer')
+        admin = User(username='admin', email='admin@aria.local', password_hash=User.hash_pw('admin123'), role='admin')
+        viewer = User(username='viewer', email='viewer@aria.local', password_hash=User.hash_pw('viewer123'), role='viewer')
         db.session.add_all([admin, viewer])
         db.session.commit()
 
-    if Warehouse.query.count() == 0:
-        sample_warehouses = [
-            Warehouse(name='Main Warehouse', location='123 Industrial Ave, Chicago, IL', manager='John Smith', capacity=10000, description='Primary storage facility for all electronics and furniture.'),
-            Warehouse(name='East Wing Storage', location='456 Commerce Blvd, New York, NY', manager='Jane Doe', capacity=5000, description='Secondary storage for stationery and overflow stock.'),
-        ]
-        for wh in sample_warehouses:
-            db.session.add(wh)
+        # Seed warehouses for admin user only
+        admin_id = admin.id
+        wh1 = Warehouse(user_id=admin_id, name='Main Warehouse', location='123 Industrial Ave, Chicago, IL', manager='John Smith', capacity=10000, description='Primary storage facility for all electronics and furniture.')
+        wh2 = Warehouse(user_id=admin_id, name='East Wing Storage', location='456 Commerce Blvd, New York, NY', manager='Jane Doe', capacity=5000, description='Secondary storage for stationery and overflow stock.')
+        db.session.add_all([wh1, wh2])
         db.session.commit()
 
-    if Product.query.count() == 0:
-        samples = []
+        # Seed products scoped to admin, assigned to warehouses
+        samples = [
+            Product(user_id=admin_id, warehouse_id=wh1.id, name='Wireless Keyboard', sku='ELEC-001', category='Electronics',
+                    quantity=45, unit_price=79.99, cost_price=40.00, supplier='TechSupplies Co.', low_stock_threshold=10, supplier_lead_days=5),
+            Product(user_id=admin_id, warehouse_id=wh1.id, name='USB-C Hub', sku='ELEC-002', category='Electronics',
+                    quantity=8, unit_price=49.99, cost_price=20.00, supplier='TechSupplies Co.', low_stock_threshold=10, supplier_lead_days=5),
+            Product(user_id=admin_id, warehouse_id=wh1.id, name='Office Chair', sku='FURN-001', category='Furniture',
+                    quantity=12, unit_price=299.99, cost_price=150.00, supplier='OfficeWorld', low_stock_threshold=5, supplier_lead_days=14),
+            Product(user_id=admin_id, warehouse_id=wh1.id, name='Standing Desk', sku='FURN-002', category='Furniture',
+                    quantity=3, unit_price=599.99, cost_price=280.00, supplier='OfficeWorld', low_stock_threshold=5, supplier_lead_days=14),
+            Product(user_id=admin_id, warehouse_id=wh2.id, name='Notebook Pack', sku='STAT-001', category='Stationery',
+                    quantity=150, unit_price=12.99, cost_price=5.00, supplier='PaperMart', low_stock_threshold=20, supplier_lead_days=3),
+            Product(user_id=admin_id, warehouse_id=wh2.id, name='Ballpoint Pens (50pk)', sku='STAT-002', category='Stationery',
+                    quantity=0, unit_price=8.99, cost_price=3.00, supplier='PaperMart', low_stock_threshold=15, supplier_lead_days=3),
+            Product(user_id=admin_id, warehouse_id=wh1.id, name='Monitor 27"', sku='ELEC-003', category='Electronics',
+                    quantity=22, unit_price=399.99, cost_price=200.00, supplier='DisplayTech', low_stock_threshold=8, supplier_lead_days=10),
+            Product(user_id=admin_id, warehouse_id=wh1.id, name='Ergonomic Mouse', sku='ELEC-004', category='Electronics',
+                    quantity=6, unit_price=59.99, cost_price=25.00, supplier='TechSupplies Co.', low_stock_threshold=10, supplier_lead_days=5),
+        ]
         for s in samples:
             db.session.add(s)
         db.session.commit()

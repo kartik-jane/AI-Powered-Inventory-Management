@@ -40,6 +40,10 @@
           <span class="wh-detail-label">🗓️ Created</span>
           <span class="wh-detail-val" id="whDetailCreated">—</span>
         </div>
+        <div class="wh-detail-row">
+          <span class="wh-detail-label">📦 Products</span>
+          <span class="wh-detail-val" id="whDetailProductCount">—</span>
+        </div>
       </div>
       <div id="whDetailDesc" style="margin-top:16px;color:var(--text2);font-size:0.9rem;line-height:1.6"></div>
     </div>
@@ -166,12 +170,21 @@
     document.getElementById('whDetailCapacity').textContent = w.capacity ? w.capacity.toLocaleString() + ' units' : '—';
     document.getElementById('whDetailCreated').textContent = new Date(w.created_at).toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'});
     document.getElementById('whDetailDesc').textContent = w.description || '';
+
+    // Fetch product count for this warehouse
+    try {
+      const res = await fetch(`/api/products?warehouse_id=${id}&per_page=1`);
+      const data = await res.json();
+      const countEl = document.getElementById('whDetailProductCount');
+      if (countEl) countEl.textContent = (data.total || 0) + ' products';
+    } catch(e) {}
+
     document.getElementById('warehouseDetailModal').classList.add('open');
   }
 
   function seeWarehouseProducts() {
     closeModal('warehouseDetailModal');
-    window.location.href = '/products';
+    window.location.href = `/products?warehouse_id=${_currentWarehouseId}`;
   }
 
   function editWarehouseFromDetail() {
