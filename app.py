@@ -60,6 +60,8 @@ class Warehouse(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    lat = db.Column(db.Float, nullable=True)
+    lng = db.Column(db.Float, nullable=True)
 
     def to_dict(self):
         return {
@@ -73,6 +75,8 @@ class Warehouse(db.Model):
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
+            'lat': self.lat,
+            'lng': self.lng,
         }
 
 
@@ -346,6 +350,8 @@ def create_warehouse():
         manager=sanitize(data.get('manager', '')),
         capacity=max(0, int(data.get('capacity', 0))),
         description=sanitize(data.get('description', '')),
+        lat=data.get('lat'),
+        lng=data.get('lng'),
     )
     db.session.add(w)
     db.session.commit()
@@ -369,6 +375,10 @@ def update_warehouse(wid):
             setattr(w, field, sanitize(data[field]))
     if 'capacity' in data:
         w.capacity = max(0, int(data['capacity']))
+    if 'lat' in data:
+        w.lat = data.get('lat')
+    if 'lng' in data:
+        w.lng = data.get('lng')
     w.updated_at = datetime.utcnow()
     db.session.commit()
     return jsonify(w.to_dict())
