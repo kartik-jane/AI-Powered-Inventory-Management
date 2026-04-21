@@ -3,7 +3,9 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from datetime import datetime, timedelta
 from functools import wraps
-import json, os, re, io, csv, hashlib, bleach
+import json, os, re, io, csv, hashlib, bleach, threading, smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -17,6 +19,28 @@ app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max upload
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+
+# ─── Email Configuration ───────────────────────────────────────────────────────
+# Set these in your .env file:
+#   MAIL_SERVER   = smtp.gmail.com          (or your SMTP host)
+#   MAIL_PORT     = 587
+#   MAIL_USERNAME = you@gmail.com
+#   MAIL_PASSWORD = your_app_password       (Gmail: use an App Password)
+#   MAIL_USE_TLS  = true
+#   MAIL_FROM     = you@gmail.com           (defaults to MAIL_USERNAME if omitted)
+
+MAIL_SERVER   = os.environ.get('MAIL_SERVER',   'smtp.gmail.com')
+MAIL_PORT     = int(os.environ.get('MAIL_PORT', 587))
+MAIL_USERNAME = os.environ.get('MAIL_USERNAME', '')
+MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', '')
+MAIL_USE_TLS  = os.environ.get('MAIL_USE_TLS',  'true').lower() == 'true'
+MAIL_FROM     = os.environ.get('MAIL_FROM', MAIL_USERNAME)
+
+# Cooldown: don't resend an email for the same product+type within this many seconds (default 6 hours)
+EMAIL_COOLDOWN_SECONDS = int(os.environ.get('EMAIL_COOLDOWN_SECONDS', 21600))
+
+# In-memory cooldown tracker  { "uid:product_id:type": datetime_sent }
+_email_cooldown: dict = {}
 
 # ─── Simple in-memory cache ────────────────────────────────────────────────────
 _cache = {}
@@ -906,11 +930,209 @@ def mark_all_read():
     db.session.commit()
     return jsonify({'ok': True})
 
+# ─── Email Alerts ──────────────────────────────────────────────────────────────
+
+def _is_email_on_cooldown(uid: int, product_id: int, alert_type: str) -> bool:
+    key = f'{uid}:{product_id}:{alert_type}'
+    last_sent = _email_cooldown.get(key)
+    if last_sent and (datetime.utcnow() - last_sent).total_seconds() < EMAIL_COOLDOWN_SECONDS:
+        return True
+    return False
+
+def _mark_email_sent(uid: int, product_id: int, alert_type: str):
+    _email_cooldown[f'{uid}:{product_id}:{alert_type}'] = datetime.utcnow()
+
+def _send_email_async(to_addr: str, subject: str, html_body: str):
+    """Send email in a background thread so it never blocks a request."""
+    def _send():
+        if not MAIL_USERNAME or not MAIL_PASSWORD:
+            app.logger.warning('Email not configured: MAIL_USERNAME or MAIL_PASSWORD missing.')
+            return
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = subject
+            msg['From']    = MAIL_FROM
+            msg['To']      = to_addr
+            msg.attach(MIMEText(html_body, 'html'))
+            with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as server:
+                if MAIL_USE_TLS:
+                    server.starttls()
+                server.login(MAIL_USERNAME, MAIL_PASSWORD)
+                server.sendmail(MAIL_FROM, to_addr, msg.as_string())
+            app.logger.info(f'Low-stock email sent to {to_addr} — {subject}')
+        except Exception as exc:
+            app.logger.error(f'Failed to send email to {to_addr}: {exc}')
+    threading.Thread(target=_send, daemon=True).start()
+
+def _build_low_stock_email(product, warehouse_name: str, username: str) -> tuple[str, str]:
+    """Return (subject, html_body) for a low-stock alert email."""
+    is_out   = product.quantity == 0
+    status   = 'OUT OF STOCK' if is_out else 'LOW STOCK'
+    color    = '#e53e3e' if is_out else '#dd6b20'
+    icon     = '🚨' if is_out else '⚠️'
+    reorder_qty = max(50, int((product.low_stock_threshold * 3)))
+
+    subject = f'{icon} [{status}] {product.name} — ARIA Inventory Alert'
+
+    html = f"""
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#0f0f1a;font-family:'Segoe UI',Arial,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f0f1a;padding:40px 0">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#1a1a2e;border-radius:16px;overflow:hidden;border:1px solid #2d2d4e">
+
+        <!-- Header -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#7b5ea7,#9b6dff);padding:32px 40px;text-align:center">
+            <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:-0.5px">
+              📦 ARIA Inventory Alert
+            </h1>
+            <p style="margin:8px 0 0;color:rgba(255,255,255,0.8);font-size:14px">Automated Stock Notification</p>
+          </td>
+        </tr>
+
+        <!-- Status Badge -->
+        <tr>
+          <td style="padding:32px 40px 0;text-align:center">
+            <span style="display:inline-block;background:{color};color:#fff;font-size:13px;font-weight:700;
+                         letter-spacing:1px;padding:8px 20px;border-radius:50px;text-transform:uppercase">
+              {icon} {status}
+            </span>
+          </td>
+        </tr>
+
+        <!-- Product Details Card -->
+        <tr>
+          <td style="padding:24px 40px">
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="background:#0f0f1a;border-radius:12px;border:1px solid #2d2d4e;overflow:hidden">
+              <tr>
+                <td style="padding:20px 24px;border-bottom:1px solid #2d2d4e">
+                  <p style="margin:0;color:#9a9bb0;font-size:12px;text-transform:uppercase;letter-spacing:0.8px">Product</p>
+                  <p style="margin:6px 0 0;color:#ffffff;font-size:20px;font-weight:700">{product.name}</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:0">
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="padding:16px 24px;border-right:1px solid #2d2d4e;border-bottom:1px solid #2d2d4e">
+                        <p style="margin:0;color:#9a9bb0;font-size:11px;text-transform:uppercase">SKU</p>
+                        <p style="margin:4px 0 0;color:#9b6dff;font-size:14px;font-weight:600;font-family:monospace">{product.sku}</p>
+                      </td>
+                      <td style="padding:16px 24px;border-bottom:1px solid #2d2d4e">
+                        <p style="margin:0;color:#9a9bb0;font-size:11px;text-transform:uppercase">Category</p>
+                        <p style="margin:4px 0 0;color:#e2e8f0;font-size:14px;font-weight:600">{product.category}</p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:16px 24px;border-right:1px solid #2d2d4e;border-bottom:1px solid #2d2d4e">
+                        <p style="margin:0;color:#9a9bb0;font-size:11px;text-transform:uppercase">Current Stock</p>
+                        <p style="margin:4px 0 0;color:{color};font-size:22px;font-weight:800">{product.quantity} units</p>
+                      </td>
+                      <td style="padding:16px 24px;border-bottom:1px solid #2d2d4e">
+                        <p style="margin:0;color:#9a9bb0;font-size:11px;text-transform:uppercase">Low Stock Threshold</p>
+                        <p style="margin:4px 0 0;color:#e2e8f0;font-size:22px;font-weight:800">{product.low_stock_threshold} units</p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:16px 24px;border-right:1px solid #2d2d4e">
+                        <p style="margin:0;color:#9a9bb0;font-size:11px;text-transform:uppercase">Supplier</p>
+                        <p style="margin:4px 0 0;color:#e2e8f0;font-size:14px;font-weight:600">{product.supplier or '—'}</p>
+                      </td>
+                      <td style="padding:16px 24px">
+                        <p style="margin:0;color:#9a9bb0;font-size:11px;text-transform:uppercase">Supplier Lead Time</p>
+                        <p style="margin:4px 0 0;color:#e2e8f0;font-size:14px;font-weight:600">{product.supplier_lead_days} days</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:16px 24px">
+                  <p style="margin:0;color:#9a9bb0;font-size:11px;text-transform:uppercase">Warehouse</p>
+                  <p style="margin:4px 0 0;color:#e2e8f0;font-size:14px;font-weight:600">{warehouse_name}</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Recommendation -->
+        <tr>
+          <td style="padding:0 40px 24px">
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="background:rgba(155,109,255,0.1);border:1px solid rgba(155,109,255,0.3);border-radius:12px">
+              <tr>
+                <td style="padding:20px 24px">
+                  <p style="margin:0;color:#9b6dff;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">
+                    💡 Recommended Action
+                  </p>
+                  <p style="margin:10px 0 0;color:#c4c4d4;font-size:14px;line-height:1.7">
+                    {'This product is completely out of stock. Place a reorder immediately to avoid fulfillment delays.' if is_out else
+                     f'Stock is critically low. We recommend reordering at least <strong style="color:#ffffff">{reorder_qty} units</strong> from <strong style="color:#ffffff">{product.supplier or "your supplier"}</strong> as soon as possible.'}
+                    {''}
+                    {f'<br><br>With a supplier lead time of <strong style="color:#ffffff">{product.supplier_lead_days} days</strong>, order now to prevent stockout.' if not is_out and product.supplier_lead_days else ''}
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="padding:20px 40px 32px;border-top:1px solid #2d2d4e;text-align:center">
+            <p style="margin:0;color:#5a5a7a;font-size:12px;line-height:1.6">
+              This alert was sent automatically by <strong style="color:#9b6dff">ARIA Inventory System</strong>
+              for account <strong style="color:#9b6dff">{username}</strong>.<br>
+              Sent at {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+"""
+    return subject, html
+
+def _send_stock_alert_email(product, alert_type: str):
+    """
+    Lookup the product owner's email and fire an alert email if:
+      - the owner has an email address on file
+      - email credentials are configured
+      - the alert is not on cooldown for this product+type
+    """
+    user = User.query.get(product.user_id)
+    if not user or not user.email:
+        return
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        return
+    if _is_email_on_cooldown(user.id, product.id, alert_type):
+        return
+
+    warehouse_name = 'Unknown Warehouse'
+    if product.warehouse_id:
+        wh = Warehouse.query.get(product.warehouse_id)
+        if wh:
+            warehouse_name = wh.name
+
+    subject, html_body = _build_low_stock_email(product, warehouse_name, user.username)
+    _mark_email_sent(user.id, product.id, alert_type)
+    _send_email_async(user.email, subject, html_body)
+
 def _check_and_notify(product):
     if product.quantity == 0:
         _push_notif(product.user_id, 'out_stock', f'⚠️ {product.name} is OUT OF STOCK', product.id)
+        _send_stock_alert_email(product, 'out_stock')
     elif product.quantity <= product.low_stock_threshold:
         _push_notif(product.user_id, 'low_stock', f'📉 {product.name} is low: {product.quantity} units remaining', product.id)
+        _send_stock_alert_email(product, 'low_stock')
     if product.expiry_date:
         days = (product.expiry_date - datetime.utcnow()).days
         if days <= 30:
@@ -1355,22 +1577,7 @@ def seed_sample_data():
 
         # Seed products scoped to admin, assigned to warehouses
         samples = [
-            Product(user_id=admin_id, warehouse_id=wh1.id, name='Wireless Keyboard', sku='ELEC-001', category='Electronics',
-                    quantity=45, unit_price=79.99, cost_price=40.00, supplier='TechSupplies Co.', low_stock_threshold=10, supplier_lead_days=5),
-            Product(user_id=admin_id, warehouse_id=wh1.id, name='USB-C Hub', sku='ELEC-002', category='Electronics',
-                    quantity=8, unit_price=49.99, cost_price=20.00, supplier='TechSupplies Co.', low_stock_threshold=10, supplier_lead_days=5),
-            Product(user_id=admin_id, warehouse_id=wh1.id, name='Office Chair', sku='FURN-001', category='Furniture',
-                    quantity=12, unit_price=299.99, cost_price=150.00, supplier='OfficeWorld', low_stock_threshold=5, supplier_lead_days=14),
-            Product(user_id=admin_id, warehouse_id=wh1.id, name='Standing Desk', sku='FURN-002', category='Furniture',
-                    quantity=3, unit_price=599.99, cost_price=280.00, supplier='OfficeWorld', low_stock_threshold=5, supplier_lead_days=14),
-            Product(user_id=admin_id, warehouse_id=wh2.id, name='Notebook Pack', sku='STAT-001', category='Stationery',
-                    quantity=150, unit_price=12.99, cost_price=5.00, supplier='PaperMart', low_stock_threshold=20, supplier_lead_days=3),
-            Product(user_id=admin_id, warehouse_id=wh2.id, name='Ballpoint Pens (50pk)', sku='STAT-002', category='Stationery',
-                    quantity=0, unit_price=8.99, cost_price=3.00, supplier='PaperMart', low_stock_threshold=15, supplier_lead_days=3),
-            Product(user_id=admin_id, warehouse_id=wh1.id, name='Monitor 27"', sku='ELEC-003', category='Electronics',
-                    quantity=22, unit_price=399.99, cost_price=200.00, supplier='DisplayTech', low_stock_threshold=8, supplier_lead_days=10),
-            Product(user_id=admin_id, warehouse_id=wh1.id, name='Ergonomic Mouse', sku='ELEC-004', category='Electronics',
-                    quantity=6, unit_price=59.99, cost_price=25.00, supplier='TechSupplies Co.', low_stock_threshold=10, supplier_lead_days=5),
+            
         ]
         for s in samples:
             db.session.add(s)
