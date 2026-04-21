@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, Response, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from datetime import datetime, timedelta
 from functools import wraps
 import json, os, re, io, csv, hashlib, bleach
@@ -15,6 +16,7 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'aria-secret-change-in-p
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max upload
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 # ─── Simple in-memory cache ────────────────────────────────────────────────────
 _cache = {}
