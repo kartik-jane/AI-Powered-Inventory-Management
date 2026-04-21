@@ -35,13 +35,23 @@ async function doLogout() {
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
 function setupNav() {
-  // Nav items are now <a> tags — browser handles navigation natively.
-  // Only wire sidebar toggle and mobile menu.
+  const sidebar = document.getElementById('sidebar');
+  const main = document.querySelector('.main');
+
+  // Restore saved state on every page load
+  if (localStorage.getItem('sidebarCollapsed') === 'true') {
+    sidebar?.classList.add('collapsed');
+    main?.classList.add('sidebar-collapsed');
+  }
+
   document.getElementById('sidebarToggle')?.addEventListener('click', () => {
-    document.getElementById('sidebar').classList.toggle('collapsed');
+    const isCollapsed = sidebar.classList.toggle('collapsed');
+    main?.classList.toggle('sidebar-collapsed', isCollapsed);
+    localStorage.setItem('sidebarCollapsed', isCollapsed);
   });
+
   document.getElementById('mobileMenu')?.addEventListener('click', () => {
-    document.getElementById('sidebar').classList.toggle('open');
+    sidebar?.classList.toggle('open');
   });
 }
 

@@ -1392,3 +1392,83 @@ body {
 
 /* ── Alert bell clickable ──────────────────────────────────────── */
 .alert-bell { cursor: pointer; }
+
+/* ── Sidebar Collapsed (minimized) ──────────────────────────────── */
+.sidebar.collapsed {
+  width: 68px;
+  overflow: hidden;
+}
+.sidebar.collapsed .logo-name,
+.sidebar.collapsed .logo-sub,
+.sidebar.collapsed .stats-grid,
+.sidebar.collapsed .sidebar-footer,
+.sidebar.collapsed .nav-item > span:not(.nav-icon) {
+  display: none;
+}
+.sidebar.collapsed .logo-icon {
+  margin: 0 auto;
+}
+.sidebar.collapsed .logo {
+  justify-content: center;
+}
+.sidebar.collapsed .sidebar-header {
+  justify-content: center;
+  padding: 20px 12px;
+}
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 12px 0;
+}
+.sidebar.collapsed .nav-item svg {
+  width: 20px;
+  height: 20px;
+}
+.sidebar.collapsed .nav-menu {
+  padding: 12px 6px;
+}
+
+/* Adjust main content when sidebar is collapsed */
+.main.sidebar-collapsed {
+  margin-left: 68px;
+}
+
+/* Smooth transition for collapse/expand */
+.sidebar {
+  transition: width 0.3s cubic-bezier(.4,0,.2,1), transform 0.35s cubic-bezier(.4,0,.2,1);
+}
+.main {
+  transition: margin-left 0.3s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── Analytics Period Dropdown ───────────────────────────────────── */
+.analytics-period label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+}
+#analyticsPeriod {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: #ffffff;
+  background-color: rgba(108, 99, 255, 0.2);   /* ← purple tint */
+  border: 1px solid var(--accent);              /* ← bright accent border */
+  border-radius: 8px;
+  padding: 6px 32px 6px 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+#analyticsPeriod:hover {
+  background-color: rgba(108, 99, 255, 0.3);   /* ← slightly brighter on hover */
+  border-color: var(--accent2);
+}
+#analyticsPeriod:focus {
+  outline: none;
+  border-color: var(--accent2);
+  box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.3);
+}
