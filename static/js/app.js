@@ -81,10 +81,8 @@ async function loadStats() {
     document.getElementById('statOut').textContent = data.out_of_stock_count;
 
     // Update KPI row if analytics panel has been initialized
-    const kpiVal = document.getElementById('kpiValue');
-    if (kpiVal) kpiVal.textContent = formatCurrency(data.total_value);
-    const kpiProfit = document.getElementById('kpiProfit');
-    if (kpiProfit) kpiProfit.textContent = formatCurrency(data.estimated_profit);
+    const kpiNetValue = document.getElementById('kpiNetValue');
+    if (kpiNetValue) kpiNetValue.textContent = formatCurrency(data.total_value);
 
     const alertCount = data.low_stock_count + data.out_of_stock_count + (data.expiring_soon?.length || 0);
     const el = document.getElementById('alertCount');
@@ -97,20 +95,31 @@ async function loadStats() {
 async function loadAnalytics() {
   const days = document.getElementById('analyticsPeriod')?.value || 30;
   try {
-    const [statsRes, analyticsRes, supplierRes] = await Promise.all([
+    const [statsRes, analyticsRes] = await Promise.all([
       fetch('/api/stats'),
       fetch(`/api/analytics?days=${days}`),
-      fetch('/api/analytics/supplier'),
     ]);
     const stats = await statsRes.json();
     const analytics = await analyticsRes.json();
-    const supplierData = await supplierRes.json();
 
-    // KPI cards
-    document.getElementById('kpiValue').textContent = formatCurrency(stats.total_value);
-    document.getElementById('kpiProfit').textContent = formatCurrency(stats.estimated_profit);
-    document.getElementById('kpiTurnover').textContent = analytics.turnover_rate + 'x';
-    document.getElementById('kpiDead').textContent = analytics.dead_stock.length;
+    // KPI cards — new set
+    const kpiNetValue = document.getElementById('kpiNetValue');
+    if (kpiNetValue) kpiNetValue.textContent = formatCurrency(stats.total_value);
+
+    const kpiTurnoverRate = document.getElementById('kpiTurnoverRate');
+    if (kpiTurnoverRate) kpiTurnoverRate.textContent = (analytics.turnover_rate || 0) + 'x';
+
+    const kpiStockouts = document.getElementById('kpiStockouts');
+    if (kpiStockouts) kpiStockouts.textContent = stats.out_of_stock_count;
+
+    const kpiFulfillment = document.getElementById('kpiFulfillment');
+    if (kpiFulfillment) {
+      // Derive fulfillment accuracy: % of products currently in-stock vs total
+      const acc = stats.total_products > 0
+        ? (((stats.total_products - stats.out_of_stock_count) / stats.total_products) * 100).toFixed(1)
+        : '100.0';
+      kpiFulfillment.textContent = acc + '%';
+    }
 
     // Category chart
     buildCategoryChart(stats.categories);
@@ -122,19 +131,98 @@ async function loadAnalytics() {
       stats.out_of_stock_count
     );
 
-    // Predictions
-    renderPredictions(analytics.stock_predictions);
-
-    // Fast movers
-    renderFastMovers(analytics.fast_movers);
-
-    // Dead stock
-    renderDeadStock(analytics.dead_stock);
-
-    // Suppliers
-    renderSuppliers(supplierData.suppliers);
+    // Stock Volume Trends chart
+    buildVolumeTrendChart(analytics, days);
 
   } catch (e) { console.error(e); }
+}
+
+function buildVolumeTrendChart(analytics, days) {
+  const ctx = document.getElementById('volumeTrendChart');
+  if (!ctx) return;
+  if (state.charts.volumeTrend) state.charts.volumeTrend.destroy();
+
+  // The API returns `daily_volume`: { "YYYY-MM-DD": totalQty, ... }
+  // This is the real data — it updates every time stock is added or removed.
+  const dailyVolume = analytics.daily_volume || {};
+
+  // Build a full date range for the period so days with no transactions show as 0
+  const labels = [];
+  const volumeData = [];
+  const now = new Date();
+  for (let i = Number(days) - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10); // "YYYY-MM-DD"
+    const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    labels.push(label);
+    volumeData.push(dailyVolume[key] || 0);
+  }
+
+  // Limit x-axis labels to avoid crowding on longer periods
+  const maxTicks = days <= 7 ? 7 : days <= 30 ? 10 : 12;
+
+  state.charts.volumeTrend = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Daily Stock Movement (units)',
+          data: volumeData,
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56,189,248,0.08)',
+          fill: true,
+          tension: 0.4,
+          pointRadius: volumeData.some(v => v > 0) ? 4 : 0, // hide dots if all zeros
+          pointBackgroundColor: '#38bdf8',
+          pointHoverRadius: 6,
+          borderWidth: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#9a9bb0', font: { size: 12 }, boxWidth: 14, padding: 16 },
+        },
+        tooltip: {
+          backgroundColor: 'rgba(8,13,26,0.92)',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          titleColor: '#e8eaf6',
+          bodyColor: '#9a9bb0',
+          callbacks: {
+            label: (c) => ` ${c.raw} units moved`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#9a9bb0', maxTicksLimit: maxTicks },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+        },
+        y: {
+          ticks: { color: '#9a9bb0' },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          beginAtZero: true,
+        },
+      },
+    },
+  });
+}
+
+function switchTrendPeriod(btn, days) {
+  document.querySelectorAll('.chart-period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  fetch(`/api/analytics?days=${days}`)
+    .then(r => r.json())
+    .then(analytics => buildVolumeTrendChart(analytics, days))
+    .catch(e => console.error(e));
 }
 
 function buildCategoryChart(categories) {

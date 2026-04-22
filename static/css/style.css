@@ -1251,6 +1251,42 @@ body {
   margin-bottom: 16px;
 }
 .chart-wrap { height: 200px; position: relative; }
+.chart-wrap--tall { height: 280px; }
+
+/* Full-width trend chart card */
+.chart-card--full {
+  margin: 0 24px 24px;
+}
+.chart-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.chart-card-header h4 { margin-bottom: 0; }
+
+/* Period toggle buttons */
+.chart-period-btns { display: flex; gap: 6px; }
+.chart-period-btn {
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--text2);
+  padding: 5px 14px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.chart-period-btn:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+.chart-period-btn.active {
+  background: rgba(108,99,255,0.18);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 
 .intel-row {
   display: grid;
@@ -1367,7 +1403,7 @@ body {
   border-radius: 12px;
   padding: 14px 16px;
   cursor: pointer;
-  transition: opacity 0.3s, background 0.15s;
+  transition: opacity 0.3s, background-color 0.15s;
   border-left: 3px solid transparent;
 }
 .notif-item:hover { background: rgba(255,255,255,0.04); }
