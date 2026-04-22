@@ -52,11 +52,38 @@
 <div class="charts-row">
   <div class="chart-card">
     <h4>Category Distribution</h4>
-    <div class="chart-wrap"><canvas id="categoryChart"></canvas></div>
-  </div>
+    <div class="chart-wrap" style="position:relative">
+        <canvas id="categoryChart"></canvas>
+        <div id="categoryChartEmpty" style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:0.85rem">No category data yet</div>
+    </div>
+</div>
   <div class="chart-card">
     <h4>Stock Status</h4>
     <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
+  </div>
+</div>
+
+<!-- Value by Category + Top Products Row -->
+<div class="charts-row" style="margin-top:16px">
+  <div class="chart-card">
+    <h4>Inventory Value by Category ($)</h4>
+    <div class="chart-wrap"><canvas id="categoryValueChart"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <h4>Top 5 Fast Movers (Units Out)</h4>
+    <div class="chart-wrap"><canvas id="fastMoverChart"></canvas></div>
+  </div>
+</div>
+
+<!-- Stock Health + Supplier Row -->
+<div class="charts-row" style="margin-top:16px; margin-bottom:16px">
+  <div class="chart-card">
+    <h4>Stock Health Overview</h4>
+    <div class="chart-wrap"><canvas id="stockHealthChart"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <h4>Products per Supplier</h4>
+    <div class="chart-wrap"><canvas id="supplierChart"></canvas></div>
   </div>
 </div>
 

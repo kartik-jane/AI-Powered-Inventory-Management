@@ -1448,8 +1448,11 @@ body {
   justify-content: center;
 }
 .sidebar.collapsed .sidebar-header {
+  flex-direction: column;
   justify-content: center;
-  padding: 20px 12px;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 8px;
 }
 .sidebar.collapsed .nav-item {
   justify-content: center;
