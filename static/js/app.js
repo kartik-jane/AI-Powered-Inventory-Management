@@ -75,10 +75,14 @@ async function loadStats() {
   try {
     const res = await fetch('/api/stats');
     const data = await res.json();
-    document.getElementById('statTotal').textContent = data.total_products;
-    document.getElementById('statValue').textContent = formatCurrency(data.total_value);
-    document.getElementById('statLow').textContent = data.low_stock_count;
-    document.getElementById('statOut').textContent = data.out_of_stock_count;
+    const statTotal = document.getElementById('statTotal');
+    const statValue = document.getElementById('statValue');
+    const statLow = document.getElementById('statLow');
+    const statOut = document.getElementById('statOut');
+    if (statTotal) statTotal.textContent = data.total_products;
+    if (statValue) statValue.textContent = formatCurrency(data.total_value);
+    if (statLow) statLow.textContent = data.low_stock_count;
+    if (statOut) statOut.textContent = data.out_of_stock_count;
 
     // Update KPI row if analytics panel has been initialized
     const kpiNetValue = document.getElementById('kpiNetValue');
@@ -86,8 +90,10 @@ async function loadStats() {
 
     const alertCount = data.low_stock_count + data.out_of_stock_count + (data.expiring_soon?.length || 0);
     const el = document.getElementById('alertCount');
-    el.textContent = alertCount;
-    el.style.display = alertCount > 0 ? 'flex' : 'none';
+    if (el) {
+      el.textContent = alertCount;
+      el.style.display = alertCount > 0 ? 'flex' : 'none';
+    }
   } catch (e) { console.error(e); }
 }
 
@@ -122,19 +128,32 @@ async function loadAnalytics() {
     }
 
     // Category chart
-    buildCategoryChart(stats.categories);
+    buildCategoryChart(stats.categories || {});
 
     // Status chart
     buildStatusChart(
-      stats.total_products - stats.low_stock_count - stats.out_of_stock_count,
-      stats.low_stock_count,
-      stats.out_of_stock_count
+      (stats.total_products || 0) - (stats.low_stock_count || 0) - (stats.out_of_stock_count || 0),
+      stats.low_stock_count || 0,
+      stats.out_of_stock_count || 0
     );
-
+    
     // Stock Volume Trends chart
     buildVolumeTrendChart(analytics, days);
+    buildCategoryValueChart(stats.categories || {});
+    buildFastMoverChart(analytics.fast_movers || []);
+    buildStockHealthChart(
+      (stats.total_products || 0) - (stats.low_stock_count || 0) - (stats.out_of_stock_count || 0),
+      stats.low_stock_count || 0,
+      stats.out_of_stock_count || 0
+    );
+buildSupplierChart(analytics.suppliers || {});
 
-  } catch (e) { console.error(e); }
+
+
+  } catch (e) {
+    console.error('loadAnalytics error:', e);
+    showToast('Analytics load failed: ' + e.message, 'error');
+  }
 }
 
 function buildVolumeTrendChart(analytics, days) {
@@ -230,6 +249,13 @@ function buildCategoryChart(categories) {
   if (!ctx) return;
   if (state.charts.category) state.charts.category.destroy();
 
+  const emptyEl = document.getElementById('categoryChartEmpty');
+  if (!categories || !Object.keys(categories).length) {
+    if (emptyEl) emptyEl.style.display = 'flex';
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = 'none';
+
   const labels = Object.keys(categories);
   const vals = labels.map(k => categories[k].count);
   const colors = ['#7b5ea7','#4ecdc4','#52e3a8','#ffd166','#ff6b6b','#9b6dff','#45b7d1'];
@@ -273,6 +299,112 @@ function buildStatusChart(inStock, low, out) {
         y: { ticks: { color: '#9a9bb0' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
       },
       plugins: { legend: { display: false } }
+    }
+  });
+}
+
+function buildCategoryValueChart(categories) {
+  const ctx = document.getElementById('categoryValueChart');
+  if (!ctx) return;
+  if (state.charts.categoryValue) state.charts.categoryValue.destroy();
+  if (!categories || !Object.keys(categories).length) return;
+  const labels = Object.keys(categories);
+  const vals = labels.map(k => parseFloat(categories[k].value || 0));
+  const colors = ['#7b5ea7','#4ecdc4','#52e3a8','#ffd166','#ff6b6b','#9b6dff','#45b7d1'];
+  state.charts.categoryValue = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ label: 'Total Value ($)', data: vals, backgroundColor: colors.slice(0, labels.length).map(c => c + 'bb'), borderColor: colors.slice(0, labels.length), borderWidth: 1, borderRadius: 8 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` $${c.raw.toFixed(2)}` } } },
+      scales: {
+        x: { ticks: { color: '#9a9bb0' }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color: '#9a9bb0', callback: v => '$' + v }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function buildFastMoverChart(movers) {
+  const ctx = document.getElementById('fastMoverChart');
+  if (!ctx) return;
+  if (state.charts.fastMover) state.charts.fastMover.destroy();
+  const top5 = movers.slice(0, 5);
+  const labels = top5.map(m => m.name.length > 14 ? m.name.slice(0, 14) + '…' : m.name);
+  const vals = top5.map(m => m.units_out || 0);
+  state.charts.fastMover = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels.length ? labels : ['No data yet'],
+      datasets: [{ label: 'Units Out', data: vals.length ? vals : [0], backgroundColor: 'rgba(108,99,255,0.6)', borderColor: '#6c63ff', borderWidth: 1, borderRadius: 8 }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#9a9bb0' }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true },
+        y: { ticks: { color: '#9a9bb0' }, grid: { color: 'rgba(255,255,255,0.04)' } }
+      }
+    }
+  });
+}
+
+function buildStockHealthChart(inStock, low, out) {
+  const ctx = document.getElementById('stockHealthChart');
+  if (!ctx) return;
+  if (state.charts.stockHealth) state.charts.stockHealth.destroy();
+  const total = inStock + low + out;
+  if (!total) {
+    // Show a grey placeholder ring instead of blank
+    inStock = 1; low = 0; out = 0;
+  }
+  const displayTotal = total || 1;
+  state.charts.stockHealth = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: [`Healthy (${inStock})`, `Low Stock (${low})`, `Out of Stock (${out})`],
+      datasets: [{
+        data: [inStock, low, out].map(v => v || 0),
+        backgroundColor: ['rgba(82,227,168,0.75)', 'rgba(255,209,102,0.75)', 'rgba(255,107,107,0.75)'],
+        borderColor: ['#52e3a8','#ffd166','#ff6b6b'],
+        borderWidth: 1, hoverOffset: 8
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '60%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#9a9bb0', font: { size: 12 }, padding: 16 } },
+        tooltip: { callbacks: { label: (c) => total ? ` ${c.label}: ${((c.raw / displayTotal) * 100).toFixed(1)}%` : ' No data yet' } }
+      }
+    }
+  });
+}
+
+function buildSupplierChart(suppliers) {
+  const ctx = document.getElementById('supplierChart');
+  if (!ctx) return;
+  if (state.charts.supplier) state.charts.supplier.destroy();
+  const entries = Object.entries(suppliers).slice(0, 7);
+  const labels = entries.map(([name]) => name.length > 14 ? name.slice(0, 14) + '…' : name);
+  const vals = entries.map(([, d]) => d.products || 0);
+  const colors = ['#7b5ea7','#4ecdc4','#52e3a8','#ffd166','#ff6b6b','#9b6dff','#45b7d1'];
+  state.charts.supplier = new Chart(ctx, {
+    type: 'pie',
+    data: {
+      labels: labels.length ? labels : ['No suppliers yet'],
+      datasets: [{ data: vals.length ? vals : [1], backgroundColor: vals.length ? colors.slice(0, labels.length).map(c => c + 'bb') : ['rgba(100,100,120,0.3)'], borderColor: vals.length ? colors.slice(0, labels.length) : ['rgba(100,100,120,0.5)'], borderWidth: 1, hoverOffset: 6 }]
+      
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#9a9bb0', font: { size: 11 }, padding: 12 } },
+        tooltip: { callbacks: { label: (c) => ` ${c.label}: ${c.raw} product(s)` } }
+      }
     }
   });
 }
@@ -759,6 +891,7 @@ function setupImportDrop() {
 // ─── Search ───────────────────────────────────────────────────────────────────
 function setupSearch() {
   const globalSearch = document.getElementById('globalSearch');
+  if (!globalSearch) return;
   globalSearch.addEventListener('input', debounce(async () => {
     const q = globalSearch.value.trim();
     if (!q) { renderProductTable(state.products); return; }
