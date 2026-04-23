@@ -50,17 +50,19 @@
 
 <!-- Charts Row -->
 <div class="charts-row">
-  <div class="chart-card">
+  <div class="chart-card" style="flex:0 0 320px">
     <h4>Category Distribution</h4>
-    <div class="chart-wrap" style="position:relative">
-        <canvas id="categoryChart"></canvas>
-        <div id="categoryChartEmpty" style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:0.85rem">No category data yet</div>
+    <div class="chart-wrap" style="position:relative;height:220px">
+      <canvas id="categoryChart"></canvas>
+      <div id="categoryChartEmpty" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;color:var(--text3);font-size:0.85rem">No category data yet</div>
     </div>
-</div>
-  <div class="chart-card">
-    <h4>Stock Status</h4>
-    <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
   </div>
+  <div class="chart-card" style="flex:1;min-width:0">
+    <h4>Top Products by Value</h4>
+    <div class="chart-wrap" style="height:260px"><canvas id="topValueChart"></canvas></div>
+  </div>
+</div>
+  
 </div>
 
 <!-- Value by Category + Top Products Row -->
@@ -78,9 +80,25 @@
 <!-- Stock Health + Supplier Row -->
 <div class="charts-row" style="margin-top:16px; margin-bottom:16px">
   <div class="chart-card">
-    <h4>Stock Health Overview</h4>
-    <div class="chart-wrap"><canvas id="stockHealthChart"></canvas></div>
+  <h4>Stock Health &amp; Action Center</h4>
+  <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+    <div style="flex:0 0 200px"><canvas id="stockHealthChart"></canvas></div>
+    <div style="flex:1;min-width:180px">
+      <div style="margin-bottom:12px">
+        <p style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin:0 0 6px">
+          🛒 Needs Restock
+        </p>
+        <div id="actionRestock" style="font-size:0.82rem;color:var(--text2);line-height:1.8">—</div>
+      </div>
+      <div>
+        <p style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin:0 0 6px">
+          🗑️ Consider Removing (Dead Stock)
+        </p>
+        <div id="actionDeadStock" style="font-size:0.82rem;color:var(--text2);line-height:1.8">—</div>
+      </div>
+    </div>
   </div>
+</div>
   <div class="chart-card">
     <h4>Products per Supplier</h4>
     <div class="chart-wrap"><canvas id="supplierChart"></canvas></div>
