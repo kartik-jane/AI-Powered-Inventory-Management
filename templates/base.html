@@ -70,6 +70,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
       <span>Add Product</span>
     </a>
+    <a class="nav-item {% block nav_scan %}{% endblock %}" href="{{ url_for('page_scan_barcode') }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9V6a1 1 0 011-1h3M3 15v3a1 1 0 001 1h3M21 9V6a1 1 0 00-1-1h-3M21 15v3a1 1 0 01-1 1h-3"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+      <span>Scan Barcode</span>
+    </a>
     <a class="nav-item {% block nav_transactions %}{% endblock %}" href="{{ url_for('page_transactions') }}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       <span>Transactions</span>

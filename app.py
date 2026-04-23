@@ -366,6 +366,11 @@ def page_import_export():
 def page_warehouses():
     return render_template('warehouses.html')
 
+@app.route('/scan-barcode')
+@login_required
+def page_scan_barcode():
+    return render_template('scan_barcode.html')
+
 # ─── Warehouse API Routes ──────────────────────────────────────────────────────
 
 @app.route('/api/warehouses', methods=['GET'])
@@ -517,6 +522,19 @@ def create_product():
 def get_product(product_id):
     uid = current_user_id()
     product = Product.query.filter_by(id=product_id, user_id=uid).first_or_404()
+    return jsonify(product.to_dict())
+
+@app.route('/api/products/by-barcode', methods=['GET'])
+@login_required
+def get_product_by_barcode():
+    uid = current_user_id()
+    code = request.args.get('code', '').strip()
+    if not code:
+        return jsonify({'error': 'code parameter required'}), 400
+    # Barcodes are encoded as the product SKU (CODE128 of SKU value)
+    product = Product.query.filter_by(sku=code, user_id=uid, is_active=True).first()
+    if not product:
+        return jsonify({'error': 'Product not found'}), 404
     return jsonify(product.to_dict())
 
 @app.route('/api/products/<int:product_id>', methods=['PUT'])
