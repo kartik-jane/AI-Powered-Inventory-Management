@@ -130,22 +130,32 @@ async function loadAnalytics() {
     // Category chart
     buildCategoryChart(stats.categories || {});
 
-    // Status chart
-    buildStatusChart(
-      (stats.total_products || 0) - (stats.low_stock_count || 0) - (stats.out_of_stock_count || 0),
-      stats.low_stock_count || 0,
-      stats.out_of_stock_count || 0
-    );
+   
+    
     
     // Stock Volume Trends chart
     buildVolumeTrendChart(analytics, days);
     buildCategoryValueChart(stats.categories || {});
     buildFastMoverChart(analytics.fast_movers || []);
-    buildStockHealthChart(
-      (stats.total_products || 0) - (stats.low_stock_count || 0) - (stats.out_of_stock_count || 0),
-      stats.low_stock_count || 0,
-      stats.out_of_stock_count || 0
-    );
+    buildTopValueChart(stats.categories || {}, analytics);
+    const healthy = (stats.total_products || 0) - (stats.low_stock_count || 0) - (stats.out_of_stock_count || 0);
+buildStockHealthChart(healthy, stats.low_stock_count || 0, stats.out_of_stock_count || 0);
+
+// Restock list
+const restockItems = [...(stats.low_stock_items || []), ...(stats.out_of_stock_items || [])]
+  .slice(0, 5)
+  .map(p => `<span style="color:${p.quantity === 0 ? 'var(--red)' : 'var(--yellow)'}">${esc(p.name)}</span> — ${p.quantity} left`)
+  .join('<br>');
+const restockEl = document.getElementById('actionRestock');
+if (restockEl) restockEl.innerHTML = restockItems || '<span style="color:var(--green)">All items healthy ✓</span>';
+
+// Dead stock list
+const deadItems = (analytics.dead_stock || [])
+  .slice(0, 4)
+  .map(p => `${esc(p.name)} — ${p.quantity} units (${formatCurrency(p.value)} tied up)`)
+  .join('<br>');
+const deadEl = document.getElementById('actionDeadStock');
+if (deadEl) deadEl.innerHTML = deadItems || 'None detected';
 buildSupplierChart(analytics.suppliers || {});
 
 
@@ -1498,3 +1508,96 @@ function voiceStop() {}
 function voiceDialogToggle() {}
 function voiceDialogStart() { startVoiceSession(); }
 function voiceDialogStop() { stopVoiceSession(); }
+
+
+function buildTopValueChart(categories, analytics) {
+  const ctx = document.getElementById('topValueChart');
+  if (!ctx) return;
+  if (state.charts.topValue) state.charts.topValue.destroy();
+
+  // Get all products from fast_movers + dead_stock and build top by value
+  const allMovers = [
+    ...(analytics.fast_movers || []),
+    ...(analytics.dead_stock || []),
+    ...(analytics.slow_movers || []),
+  ];
+
+  // Deduplicate by id
+  const seen = new Set();
+  const unique = allMovers.filter(p => {
+    if (seen.has(p.id)) return false;
+    seen.add(p.id); return true;
+  });
+
+  // Sort by value descending, take top 6
+  const top = unique
+    .filter(p => p.value > 0 || p.current_qty > 0)
+    .sort((a, b) => (b.value || 0) - (a.value || 0))
+    .slice(0, 6);
+
+  if (!top.length) {
+    // Fallback: render category values
+    const entries = Object.entries(categories).slice(0, 6);
+    const labels = entries.map(([k]) => k.length > 12 ? k.slice(0, 12) + '…' : k);
+    const vals = entries.map(([, v]) => parseFloat(v.value) || 0);
+    const colors = ['#9b6dff','#4ecdc4','#52e3a8','#ffd166','#ff6b6b','#45b7d1'];
+    state.charts.topValue = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels.length ? labels : ['No data'],
+        datasets: [{
+          label: 'Value ($)',
+          data: vals.length ? vals : [0],
+          backgroundColor: colors.map(c => c + '99'),
+          borderColor: colors,
+          borderWidth: 1,
+          borderRadius: 8,
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ` ${formatCurrency(c.raw)}` } }
+        },
+        scales: {
+          x: { ticks: { color: '#9a9bb0', callback: v => '$' + v }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true },
+          y: { ticks: { color: '#9a9bb0' }, grid: { color: 'rgba(255,255,255,0.04)' } }
+        }
+      }
+    });
+    return;
+  }
+
+  const colors = ['#9b6dff','#4ecdc4','#52e3a8','#ffd166','#ff6b6b','#45b7d1'];
+  const labels = top.map(p => p.name.length > 16 ? p.name.slice(0, 16) + '…' : p.name);
+  const vals = top.map(p => p.value || 0);
+
+  state.charts.topValue = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Stock Value ($)',
+        data: vals,
+        backgroundColor: colors.slice(0, labels.length).map(c => c + '99'),
+        borderColor: colors.slice(0, labels.length),
+        borderWidth: 1,
+        borderRadius: 8,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false, aspectRatio: 1.8,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => ` ${formatCurrency(c.raw)}` } }
+      },
+      scales: {
+        x: { ticks: { color: '#9a9bb0', maxTicksLimit: 5, callback: v => v >= 1000 ? '$' + (v/1000).toFixed(0) + 'k' : '$' + v }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true },
+y: { ticks: { color: '#9a9bb0', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+      }
+    }
+  });
+}
