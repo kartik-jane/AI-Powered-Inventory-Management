@@ -218,7 +218,8 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get('user_id'):
-            if request.is_json:
+            # Return JSON 401 for all /api/ routes or JSON requests, not a redirect
+            if request.path.startswith('/api/') or request.is_json:
                 return jsonify({'error': 'Unauthorized'}), 401
             return redirect(url_for('login_page'))
         return f(*args, **kwargs)
@@ -291,6 +292,71 @@ def api_signup():
     session['user_id'] = user.id
     session['username'] = user.username
     session['role'] = user.role
+    return jsonify({'message': 'Account created', 'username': user.username, 'role': user.role}), 201
+
+@app.route('/api/auth/check-username', methods=['POST'])
+def api_check_username():
+    d = request.json or {}
+    username = sanitize(d.get('username', ''))
+    taken = User.query.filter_by(username=username).first() is not None
+    return jsonify({'available': not taken})
+
+@app.route('/api/auth/register', methods=['POST'])
+def api_register():
+    """Full registration endpoint used by Register.html (requires email)."""
+    d = request.json or {}
+    first_name = sanitize(d.get('first_name', ''))
+    last_name  = sanitize(d.get('last_name', ''))
+    company    = sanitize(d.get('company', ''))
+    email      = sanitize(d.get('email', ''))
+    username   = sanitize(d.get('username', ''))
+    password   = d.get('password', '')
+    confirm    = d.get('confirm_password', password)  # confirm is validated client-side
+
+    # Server-side validation
+    if not first_name or not last_name:
+        return jsonify({'error': 'First and last name are required'}), 400
+    if not company:
+        return jsonify({'error': 'Company name is required'}), 400
+    if not email or not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+        return jsonify({'error': 'A valid email address is required'}), 400
+    if not username or len(username) < 3:
+        return jsonify({'error': 'Username must be at least 3 characters'}), 400
+    if not re.match(r'^[a-zA-Z0-9_]+$', username):
+        return jsonify({'error': 'Username can only contain letters, numbers, and underscores'}), 400
+    if len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters'}), 400
+    if password != confirm:
+        return jsonify({'error': 'Passwords do not match'}), 400
+    if User.query.filter_by(username=username).first():
+        return jsonify({'error': 'Username already taken'}), 400
+    if User.query.filter_by(email=email).first():
+        return jsonify({'error': 'Email already registered'}), 400
+
+    user = User(
+        username=username,
+        email=email,  # email is mandatory — required for low-stock alert emails
+        password_hash=User.hash_pw(password),
+        role='admin',
+    )
+    db.session.add(user)
+    db.session.commit()
+
+    # Auto-create a default warehouse for the new user
+    default_warehouse = Warehouse(
+        user_id=user.id,
+        name='Default Warehouse',
+        location='',
+        manager=f'{first_name} {last_name}'.strip(),
+        capacity=0,
+        description='Your default warehouse. Products added without a warehouse selection are stored here.',
+    )
+    db.session.add(default_warehouse)
+    db.session.commit()
+
+    session['user_id']  = user.id
+    session['username'] = user.username
+    session['role']     = user.role
     return jsonify({'message': 'Account created', 'username': user.username, 'role': user.role}), 201
 
 @app.route('/api/auth/login', methods=['POST'])
@@ -517,13 +583,6 @@ def create_product():
     _check_and_notify(product)
     return jsonify(product.to_dict()), 201
 
-@app.route('/api/products/<int:product_id>', methods=['GET'])
-@login_required
-def get_product(product_id):
-    uid = current_user_id()
-    product = Product.query.filter_by(id=product_id, user_id=uid).first_or_404()
-    return jsonify(product.to_dict())
-
 @app.route('/api/products/by-barcode', methods=['GET'])
 @login_required
 def get_product_by_barcode():
@@ -531,10 +590,24 @@ def get_product_by_barcode():
     code = request.args.get('code', '').strip()
     if not code:
         return jsonify({'error': 'code parameter required'}), 400
-    # Barcodes are encoded as the product SKU (CODE128 of SKU value)
+    # Barcodes are matched against SKU (exact match) or case-insensitive SKU
     product = Product.query.filter_by(sku=code, user_id=uid, is_active=True).first()
     if not product:
+        # Try case-insensitive match as fallback
+        product = Product.query.filter(
+            Product.user_id == uid,
+            Product.is_active == True,
+            db.func.lower(Product.sku) == code.lower()
+        ).first()
+    if not product:
         return jsonify({'error': 'Product not found'}), 404
+    return jsonify(product.to_dict())
+
+@app.route('/api/products/<int:product_id>', methods=['GET'])
+@login_required
+def get_product(product_id):
+    uid = current_user_id()
+    product = Product.query.filter_by(id=product_id, user_id=uid).first_or_404()
     return jsonify(product.to_dict())
 
 @app.route('/api/products/<int:product_id>', methods=['PUT'])

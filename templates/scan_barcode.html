@@ -125,64 +125,102 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.1/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
 <script>
-  let _codeReader = null;
-  let _cameras = [];
-  let _camIndex = 0;
-  let _scanning = false;
-  let _lastScanned = '';
-  let _lastScannedTime = 0;
-  let _foundProductId = null;
+  // Local helpers — app.js is NOT guaranteed on this page
+  function _formatCurrency(val) {
+    return '$' + (parseFloat(val) || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+  function _esc(str) {
+    return String(str || '').replace(/[&<>"']/g, function(c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  var _codeReader       = null;
+  var _cameras          = [];
+  var _camIndex         = 0;
+  var _scanning         = false;
+  var _lastScanned      = '';
+  var _lastScannedTime  = 0;
+  var _foundProductId   = null;
+  var _lookupInProgress = false;
 
   function setScanStatus(msg, color) {
-    const el = document.getElementById('scanStatus');
+    var el = document.getElementById('scanStatus');
     if (el) { el.textContent = msg; el.style.color = color || 'var(--text2)'; }
   }
 
   async function startScanner() {
     document.getElementById('startScanBtn').style.display = 'none';
-    document.getElementById('stopScanBtn').style.display = '';
+    document.getElementById('stopScanBtn').style.display  = '';
     setScanStatus('Starting camera…', 'var(--text2)');
+
+    if (typeof ZXing === 'undefined') {
+      setScanStatus('Scanner library failed to load — check internet connection', 'var(--red)');
+      document.getElementById('startScanBtn').style.display = '';
+      document.getElementById('stopScanBtn').style.display  = 'none';
+      return;
+    }
+
     try {
+      // Pre-request camera permission so device labels are populated
+      try {
+        var tempStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        tempStream.getTracks().forEach(function(t) { t.stop(); });
+      } catch(e) { /* permission may already be granted */ }
+
       _codeReader = new ZXing.BrowserMultiFormatReader();
-      const devices = await _codeReader.listVideoInputDevices();
-      _cameras = devices;
-      if (!devices.length) { setScanStatus('No camera found', 'var(--red)'); return; }
-      // prefer back camera
-      const backIdx = devices.findIndex(d => /back|rear|environment/i.test(d.label));
-      _camIndex = backIdx >= 0 ? backIdx : 0;
+      var devices  = await _codeReader.listVideoInputDevices();
+      _cameras     = devices;
+
+      if (!devices.length) {
+        setScanStatus('No camera found on this device', 'var(--red)');
+        document.getElementById('startScanBtn').style.display = '';
+        document.getElementById('stopScanBtn').style.display  = 'none';
+        return;
+      }
+
+      var backIdx = devices.findIndex(function(d) { return /back|rear|environment/i.test(d.label); });
+      _camIndex   = backIdx >= 0 ? backIdx : 0;
       if (devices.length > 1) document.getElementById('switchCamBtn').style.display = '';
       _startDecode();
     } catch(e) {
-      setScanStatus('Camera access denied', 'var(--red)');
+      console.error('startScanner error:', e);
+      setScanStatus('Camera access denied — please allow camera permission', 'var(--red)');
       document.getElementById('startScanBtn').style.display = '';
-      document.getElementById('stopScanBtn').style.display = 'none';
+      document.getElementById('stopScanBtn').style.display  = 'none';
     }
   }
 
   function _startDecode() {
     _scanning = true;
     setScanStatus('Scanning… align barcode in the frame', 'var(--text2)');
-    const videoEl = document.getElementById('scannerVideo');
-    _codeReader.decodeFromVideoDevice(_cameras[_camIndex].deviceId, videoEl, (result, err) => {
+    var videoEl  = document.getElementById('scannerVideo');
+    var deviceId = _cameras[_camIndex] ? _cameras[_camIndex].deviceId : undefined;
+
+    _codeReader.decodeFromVideoDevice(deviceId, videoEl, function(result, err) {
       if (!_scanning) return;
       if (result) {
-        const now = Date.now();
-        const code = result.getText();
+        var now  = Date.now();
+        var code = result.getText();
         if (code === _lastScanned && (now - _lastScannedTime) < 3000) return;
-        _lastScanned = code;
+        _lastScanned     = code;
         _lastScannedTime = now;
         onBarcodeDetected(code);
       }
+      // NotFoundException fires every frame when no barcode — safely ignore
     });
   }
 
   function stopScanner() {
     _scanning = false;
-    if (_codeReader) { _codeReader.reset(); _codeReader = null; }
+    if (_codeReader) {
+      try { _codeReader.reset(); } catch(e) {}
+      _codeReader = null;
+    }
     document.getElementById('startScanBtn').style.display = '';
-    document.getElementById('stopScanBtn').style.display = 'none';
+    document.getElementById('stopScanBtn').style.display  = 'none';
     document.getElementById('switchCamBtn').style.display = 'none';
     setScanStatus('Camera stopped', 'var(--text3)');
   }
@@ -190,74 +228,117 @@
   function switchCamera() {
     if (!_cameras.length) return;
     _scanning = false;
-    if (_codeReader) { _codeReader.reset(); }
+    if (_codeReader) { try { _codeReader.reset(); } catch(e) {} }
     _camIndex = (_camIndex + 1) % _cameras.length;
-    setTimeout(() => _startDecode(), 300);
+    setScanStatus('Switching camera…', 'var(--text2)');
+    setTimeout(function() { _startDecode(); }, 400);
   }
 
   async function onBarcodeDetected(code) {
-    setScanStatus(`Detected: ${code}`, 'var(--accent2)');
+    if (_lookupInProgress) return;
+    setScanStatus('Detected: ' + code, 'var(--accent2)');
     await lookupBarcode(code);
   }
 
   function lookupManual() {
-    const val = document.getElementById('manualBarcodeInput').value.trim();
+    var val = document.getElementById('manualBarcodeInput').value.trim();
     if (!val) return;
     lookupBarcode(val);
   }
 
   async function lookupBarcode(code) {
-    document.getElementById('scanResult').style.display = 'none';
+    if (_lookupInProgress) return;
+    _lookupInProgress = true;
+
+    document.getElementById('scanResult').style.display   = 'none';
     document.getElementById('scanNotFound').style.display = 'none';
+    setScanStatus('Looking up product…', 'var(--text2)');
+
     try {
-      const res = await fetch(`/api/products/by-barcode?code=${encodeURIComponent(code)}`);
+      var res = await fetch('/api/products/by-barcode?code=' + encodeURIComponent(code), {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      });
+
+      // Session expired — backend now returns 401 JSON for all /api/ routes
+      if (res.status === 401) {
+        setScanStatus('Session expired — redirecting to login', 'var(--red)');
+        setTimeout(function() { window.location.href = '/login'; }, 1500);
+        return;
+      }
+
+      // Check we actually got JSON back (guard against unexpected HTML responses)
+      var contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        setScanStatus('Server error — unexpected response', 'var(--red)');
+        console.error('Expected JSON, got:', contentType);
+        return;
+      }
+
+      var data = await res.json();
+
       if (!res.ok) {
-        document.getElementById('notFoundSku').textContent = `Barcode / SKU: ${code}`;
+        document.getElementById('notFoundSku').textContent    = 'Barcode / SKU: ' + code;
         document.getElementById('scanNotFound').style.display = '';
         setScanStatus('Product not found — try again', 'var(--red)');
         return;
       }
-      const p = await res.json();
-      showResult(p);
+
+      showResult(data);
+
     } catch(e) {
-      setScanStatus('Lookup error', 'var(--red)');
+      console.error('lookupBarcode error:', e);
+      setScanStatus('Network error — check your connection', 'var(--red)');
+    } finally {
+      _lookupInProgress = false;
     }
   }
 
   function showResult(p) {
     _foundProductId = p.id;
-    document.getElementById('resultName').textContent = p.name;
-    document.getElementById('resultSku').textContent = 'SKU: ' + p.sku;
-    const statusEl = document.getElementById('resultStatus');
+
+    document.getElementById('resultName').textContent     = p.name;
+    document.getElementById('resultSku').textContent      = 'SKU: ' + p.sku;
+
+    var statusEl         = document.getElementById('resultStatus');
     statusEl.textContent = p.status;
-    statusEl.className = 'badge ' + (p.status === 'In Stock' ? 'in-stock' : p.status === 'Low Stock' ? 'low-stock' : 'out-stock');
-    document.getElementById('resultQty').textContent = p.quantity;
-    document.getElementById('resultCategory').textContent = p.category || '—';
-    document.getElementById('resultPrice').textContent = formatCurrency(p.unit_price);
-    document.getElementById('resultSupplier').textContent = p.supplier || '—';
-    const imgEl = document.getElementById('resultImg');
+    statusEl.className   = 'badge ' + (
+      p.status === 'In Stock'  ? 'in-stock'  :
+      p.status === 'Low Stock' ? 'low-stock' : 'out-stock'
+    );
+
+    document.getElementById('resultQty').textContent      = p.quantity;
+    document.getElementById('resultCategory').textContent = p.category  || '—';
+    document.getElementById('resultPrice').textContent    = _formatCurrency(p.unit_price);
+    document.getElementById('resultSupplier').textContent = p.supplier  || '—';
+
+    var imgEl = document.getElementById('resultImg');
     if (p.image_filename) {
-      imgEl.src = `/static/uploads/${p.image_filename}`;
+      imgEl.src           = '/static/uploads/' + _esc(p.image_filename);
       imgEl.style.display = 'block';
     } else {
       imgEl.style.display = 'none';
     }
-    document.getElementById('resultUpdateStockBtn').onclick = () => {
+
+    document.getElementById('resultUpdateStockBtn').onclick = function() {
       stopScanner();
-      window.location.href = `/products?open_stock=${p.id}`;
+      window.location.href = '/products?open_stock=' + p.id;
     };
-    document.getElementById('resultEditBtn').onclick = () => {
+    document.getElementById('resultEditBtn').onclick = function() {
       stopScanner();
-      window.location.href = `/add-product?edit=${p.id}`;
+      window.location.href = '/add-product?edit=' + p.id;
     };
-    document.getElementById('scanResult').style.display = '';
+
+    document.getElementById('scanResult').style.display   = '';
     document.getElementById('scanNotFound').style.display = 'none';
-    setScanStatus(`Found: ${p.name}`, 'var(--green)');
+    setScanStatus('Found: ' + p.name, 'var(--green)');
   }
 
-  // Auto-start camera on page load
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', function() {
     setScanStatus('Click "Start Camera" to begin scanning', 'var(--text3)');
+    document.getElementById('manualBarcodeInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') lookupManual();
+    });
   });
 </script>
 {% endblock %}
