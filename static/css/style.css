@@ -82,7 +82,13 @@ body.light-mode .top-bar {
 body.light-mode .page-title { color: var(--text); }
 
 /* Logo name in sidebar */
+/* Logo name in sidebar */
 body.light-mode .logo-name { color: var(--text); }
+
+/* Logo image — dark in light mode */
+body.light-mode .logo img {
+  filter: brightness(0) saturate(100%);
+}
 
 /* Stat cards */
 body.light-mode .stat-card {
