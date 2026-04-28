@@ -73,7 +73,7 @@ def cache_bust(*keys):
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(200), unique=True, nullable=True)
+    email = db.Column(db.String(200), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(20), default='admin')  # admin, viewer
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -276,14 +276,16 @@ def api_signup():
         return jsonify({'error': 'Password must be at least 6 characters'}), 400
     if password != confirm:
         return jsonify({'error': 'Passwords do not match'}), 400
+    if not email or not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+        return jsonify({'error': 'A valid email address is required'}), 400
     if User.query.filter_by(username=username).first():
         return jsonify({'error': 'Username already taken'}), 400
-    if email and User.query.filter_by(email=email).first():
+    if User.query.filter_by(email=email).first():
         return jsonify({'error': 'Email already registered'}), 400
 
     user = User(
         username=username,
-        email=email if email else None,
+        email=email,  # mandatory — required for low-stock alert emails
         password_hash=User.hash_pw(password),
         role='admin',
     )
