@@ -23,7 +23,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    overflow-x: hidden;
+    padding: 24px 0;
   }
   .bg-orbs { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
   .orb {
@@ -52,6 +53,7 @@
     border-radius:14px;
     display:flex;align-items:center;justify-content:center;
     box-shadow: 0 0 24px var(--glow);
+    flex-shrink: 0;
   }
   .logo-icon svg { width:24px;height:24px;color:#fff; }
   .logo-name { font-family:'Syne',sans-serif;font-size:1.8rem;font-weight:800;color:var(--text); }
@@ -60,8 +62,9 @@
   .subtitle { color:var(--text2);font-size:0.88rem;margin-bottom:28px;line-height:1.5; }
   .form-grid { display:grid;grid-template-columns:1fr 1fr;gap:16px; }
   .full-width { grid-column: 1 / -1; }
-  .form-group { margin-bottom:0; }
+  .form-group { margin-bottom: 0; }
   label { display:block;font-size:0.82rem;color:var(--text2);margin-bottom:7px;font-weight:500; }
+
   input[type=text], input[type=email], input[type=password] {
     width:100%;
     background: rgba(255,255,255,0.04);
@@ -74,15 +77,15 @@
     transition: border-color 0.2s, box-shadow 0.2s;
     outline: none;
   }
-  input:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(123,94,167,0.2);
-  }
-  input.valid { border-color: rgba(82,227,168,0.5); }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(123,94,167,0.2); }
+  input.valid   { border-color: rgba(82,227,168,0.5); }
   input.invalid { border-color: rgba(255,107,107,0.5); }
+  input:disabled { opacity: 0.5; cursor: not-allowed; }
+
   .field-hint { font-size:0.75rem;color:var(--text3);margin-top:5px; }
   .field-hint.error { color:var(--red); }
-  .field-hint.ok { color:var(--green); }
+  .field-hint.ok    { color:var(--green); }
+
   .password-wrap { position:relative; }
   .password-wrap input { padding-right: 44px; }
   .toggle-pw {
@@ -91,16 +94,10 @@
     color:var(--text3);padding:0;display:flex;
   }
   .toggle-pw:hover { color:var(--text2); }
-  .strength-bar {
-    height:3px;border-radius:2px;margin-top:6px;
-    background:rgba(255,255,255,0.07);
-    overflow:hidden;
-  }
-  .strength-fill {
-    height:100%;width:0%;
-    border-radius:2px;
-    transition: width 0.3s, background 0.3s;
-  }
+
+  .strength-bar { height:3px;border-radius:2px;margin-top:6px;background:rgba(255,255,255,0.07);overflow:hidden; }
+  .strength-fill { height:100%;width:0%;border-radius:2px;transition:width 0.3s,background 0.3s; }
+
   .privacy-note {
     background:rgba(78,205,196,0.07);
     border:1px solid rgba(78,205,196,0.2);
@@ -112,53 +109,133 @@
     line-height:1.6;
   }
   .privacy-note strong { color:var(--cyan); }
+
+  /* ── Email + Send Code row ── */
+  .email-row { display:flex; gap:10px; align-items:flex-end; }
+  .email-row input { flex: 1; }
+  .btn-send-otp {
+    flex-shrink: 0;
+    background: rgba(155,109,255,0.15);
+    border: 1px solid rgba(155,109,255,0.4);
+    color: var(--accent2);
+    border-radius: 12px;
+    padding: 13px 16px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .btn-send-otp:hover:not(:disabled) { background: rgba(155,109,255,0.25); border-color: var(--accent2); }
+  .btn-send-otp:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* ── OTP input section ── */
+  .otp-section {
+    display: none;
+    margin-top: 14px;
+    background: rgba(155,109,255,0.07);
+    border: 1px solid rgba(155,109,255,0.25);
+    border-radius: 14px;
+    padding: 18px 18px 14px;
+  }
+  .otp-section.visible { display: block; }
+  .otp-label {
+    font-size: 0.8rem;
+    color: var(--text2);
+    margin-bottom: 10px;
+    line-height: 1.5;
+  }
+  .otp-label span { color: var(--accent2); font-weight: 600; }
+  .otp-input-row { display: flex; gap: 10px; align-items: center; }
+  .otp-input-row input {
+    flex: 1;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.1rem;
+    letter-spacing: 6px;
+    text-align: center;
+    padding: 12px 16px;
+  }
+  .btn-verify-otp {
+    flex-shrink: 0;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 18px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    box-shadow: 0 4px 14px var(--glow);
+  }
+  .btn-verify-otp:hover:not(:disabled) { opacity: 0.88; }
+  .btn-verify-otp:disabled { opacity: 0.45; cursor: not-allowed; }
+  .otp-footer { display:flex; justify-content:space-between; align-items:center; margin-top:10px; }
+  .otp-hint { font-size:0.74rem; color:var(--text3); }
+  .otp-hint.ok    { color: var(--green); }
+  .otp-hint.error { color: var(--red); }
+  .resend-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--accent2); font-size: 0.74rem; font-family: 'DM Sans', sans-serif;
+    text-decoration: underline; padding: 0;
+  }
+  .resend-btn:disabled { color: var(--text3); text-decoration: none; cursor: not-allowed; }
+
+  /* ── Verified badge ── */
+  .verified-badge {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    background: rgba(82,227,168,0.1);
+    border: 1px solid rgba(82,227,168,0.3);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    color: var(--green);
+    margin-top: 10px;
+    font-weight: 500;
+  }
+  .verified-badge.visible { display: flex; }
+
+  /* ── Buttons ── */
   .btn-signup {
     width:100%;
     background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color:#fff;
-    border:none;
-    border-radius:12px;
-    padding:14px;
-    font-size:0.98rem;
-    font-weight:600;
-    font-family:'DM Sans',sans-serif;
-    cursor:pointer;
+    color:#fff;border:none;border-radius:12px;
+    padding:14px;font-size:0.98rem;font-weight:600;
+    font-family:'DM Sans',sans-serif;cursor:pointer;
     margin-top:4px;
     transition: opacity 0.2s, transform 0.1s, box-shadow 0.2s;
     box-shadow: 0 8px 24px var(--glow);
   }
-  .btn-signup:hover { opacity:0.9;transform:translateY(-1px); }
+  .btn-signup:hover:not(:disabled) { opacity:0.9;transform:translateY(-1px); }
   .btn-signup:active { transform:translateY(0); }
-  .btn-signup:disabled { opacity:0.5;cursor:not-allowed; }
+  .btn-signup:disabled { opacity:0.4;cursor:not-allowed;transform:none; }
+
   .error-msg {
-    background: rgba(255,107,107,0.1);
-    border: 1px solid rgba(255,107,107,0.3);
-    color: var(--red);
-    border-radius:10px;
-    padding:11px 14px;
-    font-size:0.86rem;
-    margin-bottom:18px;
-    display:none;
+    background:rgba(255,107,107,0.1);border:1px solid rgba(255,107,107,0.3);
+    color:var(--red);border-radius:10px;padding:11px 14px;
+    font-size:0.86rem;margin-bottom:18px;display:none;line-height:1.5;
   }
   .success-msg {
-    background: rgba(82,227,168,0.1);
-    border: 1px solid rgba(82,227,168,0.3);
-    color: var(--green);
-    border-radius:10px;
-    padding:11px 14px;
-    font-size:0.86rem;
-    margin-bottom:18px;
-    display:none;
+    background:rgba(82,227,168,0.1);border:1px solid rgba(82,227,168,0.3);
+    color:var(--green);border-radius:10px;padding:11px 14px;
+    font-size:0.86rem;margin-bottom:18px;display:none;
   }
-  .login-link {
-    text-align:center;
-    margin-top:22px;
-    font-size:0.86rem;
-    color:var(--text3);
-  }
+  .login-link { text-align:center;margin-top:22px;font-size:0.86rem;color:var(--text3); }
   .login-link a { color:var(--accent2);text-decoration:none;font-weight:500; }
   .login-link a:hover { text-decoration:underline; }
   .form-section-gap { height:16px; }
+
+  @media (max-width: 500px) {
+    .signup-card { padding: 32px 20px; }
+    .form-grid { grid-template-columns: 1fr; }
+    .full-width { grid-column: 1; }
+    .email-row { flex-direction: column; align-items: stretch; }
+    .btn-send-otp { width: 100%; text-align: center; }
+  }
 </style>
 </head>
 <body>
@@ -189,30 +266,65 @@
     <strong>🔒 Private by default</strong> — Each account has its own isolated inventory. Your data is never shared with other users.
   </div>
 
-  <div class="error-msg" id="errorMsg"></div>
+  <div class="error-msg"   id="errorMsg"></div>
   <div class="success-msg" id="successMsg"></div>
 
   <div class="form-grid">
+
+    <!-- Username -->
     <div class="form-group full-width">
       <label>Username *</label>
       <input type="text" id="username" placeholder="e.g. john_doe" autocomplete="username" oninput="validateUsername()">
       <div class="field-hint" id="usernameHint">Minimum 3 characters, letters/numbers/underscores</div>
     </div>
+
+    <!-- Email + Send Code -->
     <div class="form-group full-width">
-      <label>Email <span style="color:var(--text3);font-size:0.75rem">(optional)</span></label>
-      <input type="email" id="email" placeholder="you@example.com" autocomplete="email">
+      <label>Email *</label>
+      <div class="email-row">
+        <input type="email" id="email" placeholder="you@example.com" autocomplete="email" oninput="onEmailInput()">
+        <button class="btn-send-otp" id="sendOtpBtn" onclick="sendOtp()" disabled>Send Code</button>
+      </div>
+      <div class="field-hint" id="emailHint">A 6-digit code will be sent to verify your email</div>
     </div>
+
+    <!-- OTP Section (hidden until code sent) -->
+    <div class="full-width">
+      <div class="otp-section" id="otpSection">
+        <div class="otp-label">
+          Enter the 6-digit code sent to <span id="otpEmailDisplay"></span>
+        </div>
+        <div class="otp-input-row">
+          <input type="text" id="otpInput" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code" oninput="onOtpInput()">
+          <button class="btn-verify-otp" id="verifyOtpBtn" onclick="verifyOtp()" disabled>Verify</button>
+        </div>
+        <div class="otp-footer">
+          <div class="otp-hint" id="otpHint">Code expires in 10 minutes</div>
+          <button class="resend-btn" id="resendBtn" onclick="resendOtp()" disabled>Resend code</button>
+        </div>
+      </div>
+
+      <!-- Verified badge -->
+      <div class="verified-badge" id="verifiedBadge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Email verified — you're good to go!
+      </div>
+    </div>
+
+    <!-- Password -->
     <div class="form-group">
       <label>Password *</label>
       <div class="password-wrap">
         <input type="password" id="password" placeholder="Min. 6 characters" autocomplete="new-password" oninput="validatePassword()">
         <button type="button" class="toggle-pw" onclick="togglePw('password', this)">
-          <svg id="eyeIcon1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:18px;height:18px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:18px;height:18px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
       </div>
       <div class="strength-bar"><div class="strength-fill" id="strengthFill"></div></div>
       <div class="field-hint" id="passwordHint">At least 6 characters</div>
     </div>
+
+    <!-- Confirm Password -->
     <div class="form-group">
       <label>Confirm Password *</label>
       <div class="password-wrap">
@@ -223,20 +335,39 @@
       </div>
       <div class="field-hint" id="confirmHint"></div>
     </div>
-  </div>
+
+  </div><!-- end form-grid -->
 
   <div class="form-section-gap"></div>
-  <button class="btn-signup" id="signupBtn" onclick="doSignup()">Create Account</button>
+
+  <button class="btn-signup" id="signupBtn" onclick="doSignup()" disabled>
+    Create Account
+  </button>
 
   <div class="login-link">
     Already have an account? <a href="/login">Sign in</a>
   </div>
-</div>
+</div><!-- end signup-card -->
 
 <script>
-document.addEventListener('keydown', e => {
-  if (e.key === 'Enter') doSignup();
-});
+/* ─── State ─────────────────────────────────── */
+let emailVerified = false;
+let resendTimer   = null;
+let resendSeconds = 0;
+
+/* ─── Helpers ───────────────────────────────── */
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent   = msg;
+  el.style.display = 'block';
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
+function showSuccess(msg) {
+  const el = document.getElementById('successMsg');
+  el.textContent   = msg;
+  el.style.display = 'block';
+}
 
 function togglePw(fieldId, btn) {
   const input = document.getElementById(fieldId);
@@ -245,99 +376,253 @@ function togglePw(fieldId, btn) {
   btn.querySelector('svg').style.opacity = isText ? '1' : '0.4';
 }
 
-function validateUsername() {
-  const val = document.getElementById('username').value.trim();
-  const hint = document.getElementById('usernameHint');
-  const input = document.getElementById('username');
-  if (!val) { hint.className='field-hint'; hint.textContent='Minimum 3 characters'; input.className=''; return false; }
-  if (val.length < 3) { hint.className='field-hint error'; hint.textContent='Too short — need at least 3 characters'; input.className='invalid'; return false; }
-  if (!/^[a-zA-Z0-9_]+$/.test(val)) { hint.className='field-hint error'; hint.textContent='Only letters, numbers, and underscores allowed'; input.className='invalid'; return false; }
-  hint.className='field-hint ok'; hint.textContent='✓ Looks good'; input.className='valid'; return true;
+function isValidEmail(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 }
 
+/* ─── Update "Create Account" button ────────── */
+function refreshSignupBtn() {
+  const btn = document.getElementById('signupBtn');
+  btn.disabled = !emailVerified;
+}
+
+/* ─── Username validation ───────────────────── */
+function validateUsername() {
+  const val  = document.getElementById('username').value.trim();
+  const hint = document.getElementById('usernameHint');
+  const inp  = document.getElementById('username');
+  if (!val) { hint.className='field-hint'; hint.textContent='Minimum 3 characters'; inp.className=''; return false; }
+  if (val.length < 3) { hint.className='field-hint error'; hint.textContent='Too short — need at least 3 characters'; inp.className='invalid'; return false; }
+  if (!/^[a-zA-Z0-9_]+$/.test(val)) { hint.className='field-hint error'; hint.textContent='Only letters, numbers, and underscores allowed'; inp.className='invalid'; return false; }
+  hint.className='field-hint ok'; hint.textContent='✓ Looks good'; inp.className='valid'; return true;
+}
+
+/* ─── Email input handler ───────────────────── */
+function onEmailInput() {
+  const val = document.getElementById('email').value.trim();
+  const btn = document.getElementById('sendOtpBtn');
+  const hint = document.getElementById('emailHint');
+
+  // If user changes email after verification, reset
+  if (emailVerified) {
+    emailVerified = false;
+    document.getElementById('verifiedBadge').classList.remove('visible');
+    document.getElementById('otpSection').classList.remove('visible');
+    document.getElementById('otpInput').value = '';
+    document.getElementById('otpHint').className = 'otp-hint';
+    document.getElementById('otpHint').textContent = 'Code expires in 10 minutes';
+    refreshSignupBtn();
+  }
+
+  if (isValidEmail(val)) {
+    btn.disabled = false;
+    hint.className = 'field-hint ok';
+    hint.textContent = '✓ Valid email — click Send Code to verify';
+    document.getElementById('email').className = 'valid';
+  } else {
+    btn.disabled = true;
+    hint.className = 'field-hint';
+    hint.textContent = 'A 6-digit code will be sent to verify your email';
+    document.getElementById('email').className = val ? 'invalid' : '';
+  }
+}
+
+/* ─── OTP input: enable Verify button when 6 digits ── */
+function onOtpInput() {
+  const val = document.getElementById('otpInput').value.replace(/\D/g,'');
+  document.getElementById('otpInput').value = val;
+  document.getElementById('verifyOtpBtn').disabled = val.length !== 6;
+}
+
+/* ─── Send OTP ──────────────────────────────── */
+async function sendOtp() {
+  hideError();
+  const email = document.getElementById('email').value.trim();
+  if (!isValidEmail(email)) { showError('Please enter a valid email address.'); return; }
+
+  const btn = document.getElementById('sendOtpBtn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  try {
+    const res  = await fetch('/api/auth/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      document.getElementById('otpEmailDisplay').textContent = email;
+      document.getElementById('otpSection').classList.add('visible');
+      document.getElementById('otpInput').focus();
+      document.getElementById('otpHint').className = 'otp-hint';
+      document.getElementById('otpHint').textContent = 'Code expires in 10 minutes';
+      btn.textContent = 'Resend';
+      startResendCooldown();
+    } else {
+      showError(data.error || 'Failed to send code. Please try again.');
+      btn.disabled = false;
+      btn.textContent = 'Send Code';
+    }
+  } catch (e) {
+    showError('Network error. Please try again.');
+    btn.disabled = false;
+    btn.textContent = 'Send Code';
+  }
+}
+
+/* ─── Resend OTP ────────────────────────────── */
+async function resendOtp() {
+  document.getElementById('otpInput').value = '';
+  document.getElementById('verifyOtpBtn').disabled = true;
+  document.getElementById('otpHint').className = 'otp-hint';
+  document.getElementById('otpHint').textContent = 'Code expires in 10 minutes';
+  await sendOtp();
+}
+
+/* ─── Resend cooldown timer (60 s) ─────────── */
+function startResendCooldown() {
+  const resendBtn = document.getElementById('resendBtn');
+  resendSeconds = 60;
+  resendBtn.disabled = true;
+  resendBtn.textContent = `Resend in ${resendSeconds}s`;
+  clearInterval(resendTimer);
+  resendTimer = setInterval(() => {
+    resendSeconds--;
+    if (resendSeconds <= 0) {
+      clearInterval(resendTimer);
+      resendBtn.disabled = false;
+      resendBtn.textContent = 'Resend code';
+    } else {
+      resendBtn.textContent = `Resend in ${resendSeconds}s`;
+    }
+  }, 1000);
+}
+
+/* ─── Verify OTP ────────────────────────────── */
+async function verifyOtp() {
+  hideError();
+  const email = document.getElementById('email').value.trim();
+  const code  = document.getElementById('otpInput').value.trim();
+  const btn   = document.getElementById('verifyOtpBtn');
+  const hint  = document.getElementById('otpHint');
+
+  btn.disabled = true;
+  btn.textContent = 'Verifying…';
+
+  try {
+    const res  = await fetch('/api/auth/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code })
+    });
+    const data = await res.json();
+
+    if (res.ok && data.verified) {
+      emailVerified = true;
+      hint.className = 'otp-hint ok';
+      hint.textContent = '✓ Email verified!';
+      document.getElementById('otpInput').className = 'valid';
+      document.getElementById('verifiedBadge').classList.add('visible');
+      document.getElementById('otpSection').classList.remove('visible'); // collapse OTP box
+      document.getElementById('sendOtpBtn').disabled = true;
+      document.getElementById('email').disabled = true;
+      refreshSignupBtn();
+      document.getElementById('password').focus();
+    } else {
+      hint.className = 'otp-hint error';
+      hint.textContent = '✗ ' + (data.error || 'Invalid code. Try again.');
+      document.getElementById('otpInput').className = 'invalid';
+      btn.disabled = false;
+      btn.textContent = 'Verify';
+    }
+  } catch (e) {
+    hint.className = 'otp-hint error';
+    hint.textContent = '✗ Network error. Please try again.';
+    btn.disabled = false;
+    btn.textContent = 'Verify';
+  }
+}
+
+/* ─── Password validation ───────────────────── */
 function validatePassword() {
-  const val = document.getElementById('password').value;
+  const val  = document.getElementById('password').value;
   const hint = document.getElementById('passwordHint');
   const fill = document.getElementById('strengthFill');
-  const input = document.getElementById('password');
-  if (!val) { fill.style.width='0%'; hint.className='field-hint'; hint.textContent='At least 6 characters'; input.className=''; return false; }
+  const inp  = document.getElementById('password');
+  if (!val) { fill.style.width='0%'; hint.className='field-hint'; hint.textContent='At least 6 characters'; inp.className=''; return false; }
   let strength = 0;
-  if (val.length >= 6) strength++;
+  if (val.length >= 6)  strength++;
   if (val.length >= 10) strength++;
   if (/[A-Z]/.test(val)) strength++;
   if (/[0-9]/.test(val)) strength++;
   if (/[^a-zA-Z0-9]/.test(val)) strength++;
-  const levels = ['','#ff6b6b','#ffd166','#52e3a8','#52e3a8','#4ecdc4'];
+  const colors = ['','#ff6b6b','#ffd166','#52e3a8','#52e3a8','#4ecdc4'];
   const labels = ['','Weak','Fair','Good','Strong','Very strong'];
-  fill.style.width = (strength * 20) + '%';
-  fill.style.background = levels[strength] || '#ff6b6b';
-  if (val.length < 6) {
-    hint.className='field-hint error'; hint.textContent='Too short — need at least 6 characters'; input.className='invalid'; return false;
-  }
-  hint.className='field-hint ok'; hint.textContent='✓ ' + (labels[strength] || 'OK'); input.className='valid'; return true;
+  fill.style.width      = (strength * 20) + '%';
+  fill.style.background = colors[strength] || '#ff6b6b';
+  if (val.length < 6) { hint.className='field-hint error'; hint.textContent='Too short — need at least 6 characters'; inp.className='invalid'; return false; }
+  hint.className='field-hint ok'; hint.textContent='✓ ' + (labels[strength]||'OK'); inp.className='valid'; return true;
 }
 
 function validateConfirm() {
-  const pw = document.getElementById('password').value;
+  const pw   = document.getElementById('password').value;
   const conf = document.getElementById('confirmPassword').value;
   const hint = document.getElementById('confirmHint');
-  const input = document.getElementById('confirmPassword');
-  if (!conf) { hint.className='field-hint'; hint.textContent=''; input.className=''; return false; }
-  if (pw !== conf) { hint.className='field-hint error'; hint.textContent='✗ Passwords do not match'; input.className='invalid'; return false; }
-  hint.className='field-hint ok'; hint.textContent='✓ Passwords match'; input.className='valid'; return true;
+  const inp  = document.getElementById('confirmPassword');
+  if (!conf) { hint.className='field-hint'; hint.textContent=''; inp.className=''; return false; }
+  if (pw !== conf) { hint.className='field-hint error'; hint.textContent='✗ Passwords do not match'; inp.className='invalid'; return false; }
+  hint.className='field-hint ok'; hint.textContent='✓ Passwords match'; inp.className='valid'; return true;
 }
 
+/* ─── Final signup ──────────────────────────── */
 async function doSignup() {
-  const username = document.getElementById('username').value.trim();
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
+  hideError();
+  const username        = document.getElementById('username').value.trim();
+  const email           = document.getElementById('email').value.trim();
+  const password        = document.getElementById('password').value;
   const confirmPassword = document.getElementById('confirmPassword').value;
-  const btn = document.getElementById('signupBtn');
-  const err = document.getElementById('errorMsg');
-  const suc = document.getElementById('successMsg');
+  const btn             = document.getElementById('signupBtn');
 
-  err.style.display = 'none';
-  suc.style.display = 'none';
+  if (!validateUsername()) { showError('Please fix username errors above.'); return; }
+  if (!emailVerified)      { showError('Please verify your email before creating an account.'); return; }
+  if (!validatePassword()) { showError('Please fix password errors above.'); return; }
+  if (!validateConfirm())  { showError('Passwords do not match.'); return; }
 
-  const uValid = validateUsername();
-  const pValid = validatePassword();
-  const cValid = validateConfirm();
-
-  if (!uValid || !pValid || !cValid) {
-    showError('Please fix the errors above before continuing.');
-    return;
-  }
-
-  btn.disabled = true;
+  btn.disabled    = true;
   btn.textContent = 'Creating account…';
 
   try {
-    const res = await fetch('/api/auth/signup', {
-      method: 'POST',
+    const res  = await fetch('/api/auth/signup', {
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, email, password, confirm_password: confirmPassword })
     });
     const data = await res.json();
     if (res.ok) {
-      suc.textContent = `✓ Account created! Welcome, ${data.username}. Redirecting…`;
-      suc.style.display = 'block';
+      showSuccess(`✓ Account created! Welcome, ${data.username}. Redirecting…`);
       setTimeout(() => { window.location.href = '/chat'; }, 1200);
     } else {
       showError(data.error || 'Signup failed. Please try again.');
+      btn.disabled    = false;
+      btn.textContent = 'Create Account';
     }
   } catch (e) {
     showError('Network error. Please try again.');
-  } finally {
-    btn.disabled = false;
+    btn.disabled    = false;
     btn.textContent = 'Create Account';
   }
 }
 
-function showError(msg) {
-  const err = document.getElementById('errorMsg');
-  err.textContent = msg;
-  err.style.display = 'block';
-}
+/* ─── Enter key support ─────────────────────── */
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || document.activeElement.tagName === 'TEXTAREA') return;
+  // If OTP input is focused, trigger verify
+  if (document.activeElement.id === 'otpInput') { verifyOtp(); return; }
+  // Otherwise trigger signup
+  if (!document.getElementById('signupBtn').disabled) doSignup();
+});
 </script>
 </body>
 </html>

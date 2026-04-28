@@ -3,7 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from datetime import datetime, timedelta
 from functools import wraps
-import json, os, re, io, csv, hashlib, bleach, threading, smtplib
+import json, os, re, io, csv, hashlib, bleach, threading, smtplib, random
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from groq import Groq
@@ -53,6 +53,8 @@ EMAIL_COOLDOWN_SECONDS = int(os.environ.get('EMAIL_COOLDOWN_SECONDS', 21600))
 # In-memory cooldown tracker  { "uid:product_id:type": datetime_sent }
 _email_cooldown: dict = {}
 
+# OTP store for email verification  { "email": { "code": "482910", "expires_at": datetime } }
+_otp_store: dict = {}
 # ─── Simple in-memory cache ────────────────────────────────────────────────────
 _cache = {}
 def cache_get(key):
@@ -316,6 +318,76 @@ def api_check_username():
     taken = User.query.filter_by(username=username).first() is not None
     return jsonify({'available': not taken})
 
+@app.route('/api/auth/send-otp', methods=['POST'])
+def api_send_otp():
+    d = request.json or {}
+    email = sanitize(d.get('email', ''))
+
+    if not email or not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+        return jsonify({'error': 'Valid email required'}), 400
+    if User.query.filter_by(email=email).first():
+        return jsonify({'error': 'Email already registered'}), 400
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        return jsonify({'error': 'Email service not configured'}), 500
+
+    code = str(random.randint(100000, 999999))
+    _otp_store[email] = {
+        'code': code,
+        'expires_at': datetime.utcnow() + timedelta(minutes=10)
+    }
+
+    html_body = f"""
+    <div style="font-family:Arial,sans-serif;background:#0f0f1a;padding:40px;text-align:center">
+      <div style="background:#1a1a2e;border-radius:16px;padding:40px;max-width:480px;margin:auto;border:1px solid #2d2d4e">
+        <h2 style="color:#9b6dff;margin-bottom:8px">ARIA Inventory System</h2>
+        <p style="color:#9a9bb0;margin-bottom:24px">Your email verification code</p>
+        <div style="background:#0f0f1a;border:1px solid #9b6dff;border-radius:12px;padding:24px;margin:24px 0">
+          <span style="font-size:36px;font-weight:800;letter-spacing:12px;color:#ffffff;font-family:monospace">{code}</span>
+        </div>
+        <p style="color:#9a9bb0;font-size:13px">This code expires in <strong style="color:#fff">10 minutes</strong>.<br>Do not share this code with anyone.</p>
+      </div>
+    </div>
+    """
+
+    def _send():
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = '🔐 Your ARIA Verification Code'
+            msg['From']    = MAIL_FROM
+            msg['To']      = email
+            msg.attach(MIMEText(html_body, 'html'))
+            with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as server:
+                if MAIL_USE_TLS:
+                    server.starttls()
+                server.login(MAIL_USERNAME, MAIL_PASSWORD)
+                server.sendmail(MAIL_FROM, email, msg.as_string())
+        except Exception as exc:
+            app.logger.error(f'OTP email failed: {exc}')
+
+    threading.Thread(target=_send, daemon=True).start()
+    return jsonify({'message': 'OTP sent to your email'}), 200
+
+
+@app.route('/api/auth/verify-otp', methods=['POST'])
+def api_verify_otp():
+    d = request.json or {}
+    email = sanitize(d.get('email', ''))
+    code  = d.get('code', '').strip()
+
+    entry = _otp_store.get(email)
+    if not entry:
+        return jsonify({'error': 'No OTP sent for this email. Request a new code.'}), 400
+    if datetime.utcnow() > entry['expires_at']:
+        _otp_store.pop(email, None)
+        return jsonify({'error': 'OTP expired. Request a new code.'}), 400
+    if entry['code'] != code:
+        return jsonify({'error': 'Incorrect code. Please try again.'}), 400
+
+    # Mark as verified (keep in store so register can check it)
+    _otp_store[email]['verified'] = True
+    return jsonify({'verified': True}), 200
+
+
 @app.route('/api/auth/register', methods=['POST'])
 def api_register():
     """Full registration endpoint used by Register.html (requires email)."""
@@ -347,6 +419,12 @@ def api_register():
         return jsonify({'error': 'Username already taken'}), 400
     if User.query.filter_by(email=email).first():
         return jsonify({'error': 'Email already registered'}), 400
+    # Check OTP was verified
+    otp_entry = _otp_store.get(email)
+    if not otp_entry or not otp_entry.get('verified'):
+        return jsonify({'error': 'Email not verified. Please verify your email first.'}), 400
+    # Clear OTP after successful registration
+    _otp_store.pop(email, None)
 
     user = User(
         username=username,
