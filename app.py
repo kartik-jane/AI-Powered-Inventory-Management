@@ -285,6 +285,13 @@ def api_signup():
     if User.query.filter_by(email=email).first():
         return jsonify({'error': 'Email already registered'}), 400
 
+    # Check OTP was verified
+    otp_entry = _otp_store.get(email)
+    if not otp_entry or not otp_entry.get('verified'):
+        return jsonify({'error': 'Email not verified. Please verify your email first.'}), 400
+    # Clear OTP after successful registration
+    _otp_store.pop(email, None)
+
     user = User(
         username=username,
         email=email,  # mandatory — required for low-stock alert emails
