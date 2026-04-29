@@ -31,9 +31,7 @@ app.config['SESSION_COOKIE_SECURE'] = os.environ.get('RAILWAY_ENVIRONMENT') is n
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 # Initialize database tables on startup
-with app.app_context():
-    db.create_all()
-    seed_sample_data()
+
 # ─── Email Configuration ───────────────────────────────────────────────────────
 # Set these in your .env file:
 #   MAIL_SERVER   = smtp.gmail.com          (or your SMTP host)
@@ -1788,6 +1786,9 @@ def seed_sample_data():
         for s in samples:
             db.session.add(s)
         db.session.commit()
+with app.app_context():
+    db.create_all()
+    seed_sample_data()
 
 if __name__ == '__main__':
     with app.app_context():
